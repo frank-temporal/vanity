@@ -32,6 +32,9 @@ sha2 = "0.10.8"
 solana-pubkey = { version = "2.1.0", features = ["sha2"] }
 solana-rpc-client = { version = "2.1.0", optional = true }
 solana-sdk = { version = "2.1.0", optional = true }
+cuda-device = { git = "https://github.com/NVlabs/cuda-oxide.git" }
+cuda-host = { git = "https://github.com/NVlabs/cuda-oxide.git" }
+cuda-core = { git = "https://github.com/NVlabs/cuda-oxide.git" }
 
 [build-dependencies]
 cc = { version = "1.0.98", optional = true }

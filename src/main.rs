@@ -34,6 +34,11 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[cfg(feature = "gpu")]
+mod kernels;
+#[cfg(feature = "gpu")]
+mod gpu;
+
 #[derive(Debug, Parser)]
 pub enum Command {
     Grind(GrindArgs),
@@ -456,105 +461,91 @@ fn grind(mut args: GrindArgs) {
         let base = args.base;
         let owner = args.owner;
         let ci = args.case_insensitive;
+        let prefix_bytes = prefix.as_bytes().to_vec();
+        let suffix_bytes = suffix.as_bytes().to_vec();
         Some(
             thread::Builder::new()
                 .name("gpu_mgr".into())
                 .spawn(move || {
-                    let mut contexts = Vec::with_capacity(num_gpus as usize);
-                    for id in 0..num_gpus {
-                        let ctx = unsafe {
-                            gpu_grind_init(
-                                id as i32,
-                                base.as_ref().as_ptr(),
-                                owner.as_ref().as_ptr(),
-                                prefix.as_ptr(),
-                                prefix.len() as u64,
-                                suffix.as_ptr(),
-                                suffix.len() as u64,
-                                ci,
-                            )
-                        };
-                        contexts.push(ctx);
-                    }
+                    let base_arr: [u8; 32] = base.as_ref().try_into().unwrap();
+                    let owner_arr: [u8; 32] = owner.as_ref().try_into().unwrap();
+
+                    let mut grinders: Vec<gpu::GpuGrindCtx> = (0..num_gpus)
+                        .map(|id| gpu::GpuGrindCtx::new(
+                            id as usize,
+                            &base_arr,
+                            &owner_arr,
+                            &prefix_bytes,
+                            &suffix_bytes,
+                            ci,
+                        ))
+                        .collect();
 
                     let mut iterations = vec![0u64; num_gpus as usize];
                     let mut launch_times = vec![Instant::now(); num_gpus as usize];
-                    let mut in_flight = vec![false; num_gpus as usize];
 
-                    for (i, &ctx) in contexts.iter().enumerate() {
+                    // initial wave
+                    for (i, g) in grinders.iter_mut().enumerate() {
                         let seed = new_gpu_seed(i as u32, 0);
                         launch_times[i] = Instant::now();
-                        unsafe { gpu_grind_launch(ctx, seed.as_ptr()); }
-                        in_flight[i] = true;
+                        g.launch(&seed);
                     }
 
+                    // synchronous round-robin: cuda-oxide's CudaStream has no is_done(),
+                    // so we just sync each in turn. for num_gpus=1 this is the same as
+                    // the original; for num_gpus>1 we lose some overlap but stay correct.
                     loop {
                         if done(target_count) { break; }
 
-                        let mut any_ready = false;
-                        for (i, &ctx) in contexts.iter().enumerate() {
-                            if !in_flight[i] { continue; }
-                            if unsafe { gpu_grind_query(ctx) } == 0 { continue; }
-                            any_ready = true;
-
+                        for i in 0..num_gpus as usize {
+                            if done(target_count) { break; }
+                            grinders[i].sync();
+                            let (out_seed, count, kernel_done) = grinders[i].read();
                             let time_sec = launch_times[i].elapsed().as_secs_f64();
-                            let mut out = [0u8; 24];
-                            unsafe { gpu_grind_read(ctx, out.as_mut_ptr()); }
-
-                            let reconstructed: [u8; 32] = Sha256::new()
-                                .chain_update(base)
-                                .chain_update(&out[..16])
-                                .chain_update(owner)
-                                .finalize()
-                                .into();
-                            let out_str = fd_bs58::encode_32(reconstructed);
-                            let out_str_check = maybe_bs58_aware_lowercase(&out_str, ci);
-                            let count = u64::from_le_bytes(array::from_fn(|j| out[16 + j]));
 
                             TOTAL_ATTEMPTS.fetch_add(count, Ordering::Relaxed);
 
-                            if out_str_check.starts_with(prefix) && out_str_check.ends_with(suffix)
-                            {
-                                eprintln!(
-                                    "\r\x1b[Kgpu {} match: {} in {:.3}s",
-                                    i, &out_str, time_sec
-                                );
-                                eprintln!(
-                                    "out seed = {out:?} -> {}",
-                                    core::str::from_utf8(&out[..16]).unwrap()
-                                );
-                                FOUND.fetch_add(1, Ordering::SeqCst);
+                            if kernel_done {
+                                let reconstructed: [u8; 32] = Sha256::new()
+                                    .chain_update(base)
+                                    .chain_update(&out_seed)
+                                    .chain_update(owner)
+                                    .finalize()
+                                    .into();
+                                let out_str = fd_bs58::encode_32(reconstructed);
+                                let out_str_check = maybe_bs58_aware_lowercase(&out_str, ci);
+
+                                if out_str_check.starts_with(prefix) && out_str_check.ends_with(suffix) {
+                                    eprintln!(
+                                        "\r\x1b[Kgpu {} match: {} in {:.3}s",
+                                        i, &out_str, time_sec
+                                    );
+                                    eprintln!(
+                                        "out seed = {:?} -> {}",
+                                        out_seed,
+                                        core::str::from_utf8(&out_seed).unwrap_or("<non-utf8>")
+                                    );
+                                    FOUND.fetch_add(1, Ordering::SeqCst);
+                                }
                             }
 
-                            in_flight[i] = false;
                             if !done(target_count) {
                                 iterations[i] += 1;
                                 let seed = new_gpu_seed(i as u32, iterations[i]);
                                 launch_times[i] = Instant::now();
-                                unsafe { gpu_grind_launch(ctx, seed.as_ptr()); }
-                                in_flight[i] = true;
+                                grinders[i].launch(&seed);
                             }
-                        }
-
-                        if !any_ready {
-                            thread::sleep(Duration::from_millis(10));
                         }
                     }
 
-                    for (i, &ctx) in contexts.iter().enumerate() {
-                        if in_flight[i] {
-                            while unsafe { gpu_grind_query(ctx) } == 0 {
-                                thread::sleep(Duration::from_millis(10));
-                            }
-                            let mut out = [0u8; 24];
-                            unsafe { gpu_grind_read(ctx, out.as_mut_ptr()); }
-                            let count = u64::from_le_bytes(array::from_fn(|j| out[16 + j]));
-                            TOTAL_ATTEMPTS.fetch_add(count, Ordering::Relaxed);
-                        }
+                    // drain in-flight on shutdown
+                    for g in &grinders {
+                        g.sync();
+                        let (_, count, _) = g.read();
+                        TOTAL_ATTEMPTS.fetch_add(count, Ordering::Relaxed);
                     }
-                    for ctx in contexts {
-                        unsafe { gpu_grind_destroy(ctx); }
-                    }
+
+                    // grinders dropped here — DeviceBuffer drop should handle cudaFree
                 })
                 .unwrap(),
         )
@@ -913,21 +904,6 @@ fn bs58_ci_matches(haystack: &str, pattern: &str, prefix: bool) -> bool {
 
 #[cfg(feature = "gpu")]
 extern "C" {
-    pub fn gpu_grind_init(
-        id: i32,
-        base: *const u8,
-        owner: *const u8,
-        target: *const u8,
-        target_len: u64,
-        suffix: *const u8,
-        suffix_len: u64,
-        case_insensitive: bool,
-    ) -> *mut std::ffi::c_void;
-    pub fn gpu_grind_launch(ctx: *mut std::ffi::c_void, seed: *const u8);
-    pub fn gpu_grind_query(ctx: *mut std::ffi::c_void) -> i32;
-    pub fn gpu_grind_read(ctx: *mut std::ffi::c_void, out: *mut u8);
-    pub fn gpu_grind_destroy(ctx: *mut std::ffi::c_void);
-
     pub fn gpu_keypair_init(
         id: i32,
         prefix: *const u8,
