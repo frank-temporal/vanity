@@ -10,7 +10,7 @@ use cuda_bindings::{
 
 use std::sync::Arc;
 
-use crate::kernels::vanity::__vanity_search_CudaKernel;
+use crate::kernels::vanity::{__vanity_search_CudaKernel, MAX_PREFIX, MAX_SUFFIX};
 
 fn dev_attr(device: cuda_bindings::CUdevice, attr: u32) -> i32 {
     let mut val = std::mem::MaybeUninit::uninit();
@@ -26,6 +26,58 @@ fn gcd(a: u32, b: u32) -> u32 {
     if b == 0 { a } else { gcd(b, a % b) }
 }
 
+/// Numeric base58 alphabets in **digit order** (index 0..57). The kernel
+/// matches in this numeric space, so the host has to convert prefix/suffix
+/// chars to a bitmask of valid digit values.
+///
+/// Both alphabets mirror `kernels::base58::alphabet_at`. The CI alphabet has
+/// duplicate entries so a lowercased prefix char can match the digit slot
+/// originally assigned to either case (e.g. 'a' is at indices 9 and 32).
+const ALPHABET_NO_CI: &[u8; 58] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+// alphabet_at(_, true) — entries 0..57 in order. Index 57 falls back to 'z' too.
+const ALPHABET_CI: &[u8; 58] = b"123456789abcdefghjLmnpqrstuvwxyzabcdefghijkmnopqrstuvwxyzz";
+
+/// For one prefix/suffix character, return a u64 mask whose bit i is set
+/// iff numeric base58 digit i would print as that character (under the chosen
+/// case-sensitivity mode).
+fn char_to_digit_mask(c: u8, case_insensitive: bool) -> u64 {
+    let alphabet: &[u8; 58] = if case_insensitive { ALPHABET_CI } else { ALPHABET_NO_CI };
+    let mut mask: u64 = 0;
+    for (i, &b) in alphabet.iter().enumerate() {
+        if b == c {
+            mask |= 1u64 << i;
+        }
+    }
+    mask
+}
+
+/// Build the prefix mask buffer (MAX_PREFIX × u64). Slot i is the mask for
+/// `prefix[i]`; trailing slots stay 0 (unused — gated on prefix_len in the kernel).
+fn build_prefix_masks(prefix: &[u8], ci: bool) -> [u64; MAX_PREFIX] {
+    assert!(prefix.len() <= MAX_PREFIX, "prefix too long: max {MAX_PREFIX}");
+    let mut out = [0u64; MAX_PREFIX];
+    for (i, &c) in prefix.iter().enumerate() {
+        let m = char_to_digit_mask(c, ci);
+        assert!(m != 0, "prefix char {:?} not in base58 alphabet", c as char);
+        out[i] = m;
+    }
+    out
+}
+
+/// Build the suffix mask buffer in **reversed** order (slot i = (i+1)-th-from-last
+/// character of the suffix). Matches the kernel's per-iter suffix check, which
+/// reads sm[0] for the last digit, sm[1] for the second-to-last, etc.
+fn build_suffix_masks(suffix: &[u8], ci: bool) -> [u64; MAX_SUFFIX] {
+    assert!(suffix.len() <= MAX_SUFFIX, "suffix too long: max {MAX_SUFFIX}");
+    let mut out = [0u64; MAX_SUFFIX];
+    for (i, &c) in suffix.iter().rev().enumerate() {
+        let m = char_to_digit_mask(c, ci);
+        assert!(m != 0, "suffix char {:?} not in base58 alphabet", c as char);
+        out[i] = m;
+    }
+    out
+}
+
 pub struct GpuGrindCtx {
     _ctx: Arc<CudaContext>,
     stream: Arc<CudaStream>,
@@ -33,8 +85,8 @@ pub struct GpuGrindCtx {
 
     d_base: DeviceBuffer<u8>,
     d_owner: DeviceBuffer<u8>,
-    d_target: DeviceBuffer<u8>,
-    d_suffix: DeviceBuffer<u8>,
+    d_prefix_masks: DeviceBuffer<u64>,
+    d_suffix_masks: DeviceBuffer<u64>,
 
     d_seed: DeviceBuffer<u8>,
     d_out: DeviceBuffer<u8>,
@@ -43,9 +95,8 @@ pub struct GpuGrindCtx {
 
     num_blocks: u32,
     num_threads: u32,
-    target_len: u64,
+    prefix_len: u64,
     suffix_len: u64,
-    case_insensitive: u32,
     target_cycles: u64,
 }
 
@@ -70,21 +121,16 @@ impl GpuGrindCtx {
         let num_threads: u32 = 256;
         let num_blocks: u32 = block_size * mpc_count;
 
-        let target_len = target.len() as u64;
+        let prefix_len = target.len() as u64;
         let suffix_len = suffix.len() as u64;
+
+        let prefix_masks = build_prefix_masks(target, case_insensitive);
+        let suffix_masks = build_suffix_masks(suffix, case_insensitive);
 
         let d_base   = DeviceBuffer::from_host(&stream, base).expect("d_base");
         let d_owner  = DeviceBuffer::from_host(&stream, owner).expect("d_owner");
-        let d_target = if target.is_empty() {
-            DeviceBuffer::<u8>::zeroed(&stream, 1).expect("d_target")
-        } else {
-            DeviceBuffer::from_host(&stream, target).expect("d_target")
-        };
-        let d_suffix = if suffix.is_empty() {
-            DeviceBuffer::<u8>::zeroed(&stream, 1).expect("d_suffix")
-        } else {
-            DeviceBuffer::from_host(&stream, suffix).expect("d_suffix")
-        };
+        let d_prefix_masks = DeviceBuffer::from_host(&stream, &prefix_masks).expect("d_prefix_masks");
+        let d_suffix_masks = DeviceBuffer::from_host(&stream, &suffix_masks).expect("d_suffix_masks");
 
         let d_seed  = DeviceBuffer::<u8>::zeroed(&stream, 32).expect("d_seed");
         let d_out   = DeviceBuffer::<u8>::zeroed(&stream, 16).expect("d_out");
@@ -100,17 +146,16 @@ impl GpuGrindCtx {
             module,
             d_base,
             d_owner,
-            d_target,
-            d_suffix,
+            d_prefix_masks,
+            d_suffix_masks,
             d_seed,
             d_out,
             d_done,
             d_count,
             num_blocks,
             num_threads,
-            target_len,
+            prefix_len,
             suffix_len,
-            case_insensitive: if case_insensitive { 1 } else { 0 },
             target_cycles,
         }
     }
@@ -132,18 +177,17 @@ impl GpuGrindCtx {
                 shared_mem_bytes: 0,
             },
             args: [
-                self.d_seed.cu_deviceptr()   as *mut u8,
-                self.d_base.cu_deviceptr()   as *mut u8,
-                self.d_owner.cu_deviceptr()  as *mut u8,
-                self.d_target.cu_deviceptr() as *mut u8,
-                self.target_len,
-                self.d_suffix.cu_deviceptr() as *mut u8,
+                self.d_seed.cu_deviceptr()         as *mut u8,
+                self.d_base.cu_deviceptr()         as *mut u8,
+                self.d_owner.cu_deviceptr()        as *mut u8,
+                self.d_prefix_masks.cu_deviceptr() as *mut u64,
+                self.prefix_len,
+                self.d_suffix_masks.cu_deviceptr() as *mut u64,
                 self.suffix_len,
-                self.d_out.cu_deviceptr()    as *mut u8,
-                self.case_insensitive,
+                self.d_out.cu_deviceptr()          as *mut u8,
                 self.target_cycles,
-                self.d_done.cu_deviceptr()   as *mut i32,
-                self.d_count.cu_deviceptr()  as *mut u64,
+                self.d_done.cu_deviceptr()         as *mut i32,
+                self.d_count.cu_deviceptr()        as *mut u64,
             ]
         }
         .expect("kernel launch");

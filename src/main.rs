@@ -34,9 +34,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-#[cfg(feature = "gpu")]
+// #[cfg(feature = "gpu")]
 mod kernels;
-#[cfg(feature = "gpu")]
+// #[cfg(feature = "gpu")]
 mod gpu;
 
 #[derive(Debug, Parser)]

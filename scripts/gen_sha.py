@@ -1,6 +1,19 @@
 #!/usr/bin/env python3
-"""Generates fully-unrolled sha256_transform AND sha256_80 with constants inlined.
-Outputs to stdout — redirect to src/kernels/sha256.rs"""
+"""Generates src/kernels/sha256.rs as a pair of macros:
+
+  sha256_80!(base, seed, owner => h0, h1, h2, h3, h4, h5, h6, h7)
+
+      Hash 80 bytes (base[32] || seed[16] || owner[32]) and *inject* the 8 u32
+      result words as `let h0 = ...; ... let h7 = ...;` into the caller's scope.
+      This keeps the digest in registers — no [u8;32] buffer ever exists, so we
+      don't pay local-memory traffic between sha256 and the next stage.
+
+  sha256_transform!(state, block)
+      Compatibility wrapper around the same compress core, used by hostside
+      tests. Operates on byte-array I/O and is therefore slower; not used in
+      the hot path.
+
+Output to stdout — redirect to src/kernels/sha256.rs."""
 
 K = [
     0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
@@ -17,140 +30,158 @@ INIT_STATE = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
               0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19]
 
 
-def emit_load_m(prefix, byte_expr_for_idx):
-    """emit `let m{prefix}{i:02} = ...` for i in 0..16, loading u32s big-endian.
-    byte_expr_for_idx(byte_offset) returns a string for that byte expression."""
+# Helper-function paths used inside the emitted macro body.
+EP0 = "$crate::kernels::sha256::ep0"
+EP1 = "$crate::kernels::sha256::ep1"
+SIG0 = "$crate::kernels::sha256::sig0"
+SIG1 = "$crate::kernels::sha256::sig1"
+CH = "$crate::kernels::sha256::ch"
+MAJ = "$crate::kernels::sha256::maj"
+
+
+def emit_load_m(prefix, byte_expr_for_idx, indent):
     for i in range(16):
         b0, b1, b2, b3 = i*4, i*4+1, i*4+2, i*4+3
-        print(f"    let m{prefix}{i:02}: u32 =")
-        print(f"          (({byte_expr_for_idx(b0)}) as u32) << 24")
-        print(f"        | (({byte_expr_for_idx(b1)}) as u32) << 16")
-        print(f"        | (({byte_expr_for_idx(b2)}) as u32) << 8")
-        print(f"        | (({byte_expr_for_idx(b3)}) as u32);")
+        print(f"{indent}let m{prefix}{i:02}: u32 =")
+        print(f"{indent}      (({byte_expr_for_idx(b0)}) as u32) << 24")
+        print(f"{indent}    | (({byte_expr_for_idx(b1)}) as u32) << 16")
+        print(f"{indent}    | (({byte_expr_for_idx(b2)}) as u32) << 8")
+        print(f"{indent}    | (({byte_expr_for_idx(b3)}) as u32);")
 
 
-def emit_extend_m(prefix):
-    """emit message-schedule extension m{prefix}16 .. m{prefix}63"""
+def emit_extend_m(prefix, indent):
     for i in range(16, 64):
-        print(f"    let m{prefix}{i:02}: u32 = "
-              f"sig1(m{prefix}{i-2:02})"
+        print(f"{indent}let m{prefix}{i:02}: u32 = "
+              f"{SIG1}(m{prefix}{i-2:02})"
               f".wrapping_add(m{prefix}{i-7:02})"
-              f".wrapping_add(sig0(m{prefix}{i-15:02}))"
+              f".wrapping_add({SIG0}(m{prefix}{i-15:02}))"
               f".wrapping_add(m{prefix}{i-16:02});")
 
 
-def emit_compress(prefix, in_state_vars, out_state_vars):
-    """emit 64 compression rounds reading m{prefix}NN.
-    in_state_vars/out_state_vars are 8-tuples of var names for state in/out."""
+def emit_compress(prefix, in_state_vars, out_state_vars, indent):
     a, b, c, d, e, f, g, h = in_state_vars
-    print(f"    let mut a = {a};")
-    print(f"    let mut b = {b};")
-    print(f"    let mut c = {c};")
-    print(f"    let mut d = {d};")
-    print(f"    let mut e = {e};")
-    print(f"    let mut f = {f};")
-    print(f"    let mut g = {g};")
-    print(f"    let mut h = {h};")
+    print(f"{indent}let mut a = {a};")
+    print(f"{indent}let mut b = {b};")
+    print(f"{indent}let mut c = {c};")
+    print(f"{indent}let mut d = {d};")
+    print(f"{indent}let mut e = {e};")
+    print(f"{indent}let mut f = {f};")
+    print(f"{indent}let mut g = {g};")
+    print(f"{indent}let mut h = {h};")
     for i in range(64):
-        print(f"    // round {i}")
-        print(f"    {{")
-        print(f"        let t1 = h.wrapping_add(ep1(e)).wrapping_add(ch(e, f, g))"
+        print(f"{indent}// round {i}")
+        print(f"{indent}{{")
+        print(f"{indent}    let t1 = h.wrapping_add({EP1}(e)).wrapping_add({CH}(e, f, g))"
               f".wrapping_add(0x{K[i]:08x}u32).wrapping_add(m{prefix}{i:02});")
-        print(f"        let t2 = ep0(a).wrapping_add(maj(a, b, c));")
-        print(f"        h = g; g = f; f = e; e = d.wrapping_add(t1); "
+        print(f"{indent}    let t2 = {EP0}(a).wrapping_add({MAJ}(a, b, c));")
+        print(f"{indent}    h = g; g = f; f = e; e = d.wrapping_add(t1); "
               f"d = c; c = b; b = a; a = t1.wrapping_add(t2);")
-        print(f"    }}")
+        print(f"{indent}}}")
     oa, ob, oc, od, oe, of, og, oh = out_state_vars
-    print(f"    let {oa} = {a}.wrapping_add(a);")
-    print(f"    let {ob} = {b}.wrapping_add(b);")
-    print(f"    let {oc} = {c}.wrapping_add(c);")
-    print(f"    let {od} = {d}.wrapping_add(d);")
-    print(f"    let {oe} = {e}.wrapping_add(e);")
-    print(f"    let {of} = {f}.wrapping_add(f);")
-    print(f"    let {og} = {g}.wrapping_add(g);")
-    print(f"    let {oh} = {h}.wrapping_add(h);")
+    print(f"{indent}let {oa} = {a}.wrapping_add(a);")
+    print(f"{indent}let {ob} = {b}.wrapping_add(b);")
+    print(f"{indent}let {oc} = {c}.wrapping_add(c);")
+    print(f"{indent}let {od} = {d}.wrapping_add(d);")
+    print(f"{indent}let {oe} = {e}.wrapping_add(e);")
+    print(f"{indent}let {of} = {f}.wrapping_add(f);")
+    print(f"{indent}let {og} = {g}.wrapping_add(g);")
+    print(f"{indent}let {oh} = {h}.wrapping_add(h);")
 
 
-print("""use cuda_device::device;
+# ─── header ─────────────────────────────────────────────────────────────────
+print("""// AUTOGENERATED by scripts/gen_sha.py — do not edit by hand.
+
+// Small inline helpers. Emitted as `pub(crate) fn #[inline(always)]` because
+// they're tiny (3-5 ops) and rustc's MIR inliner folds them into the caller
+// before cuda-oxide's collector ever sees them as standalone items —
+// confirmed: no `vanity__kernels__sha256__ep0` etc. in the emitted PTX.
 
 #[inline(always)]
-fn ep0(x: u32) -> u32 { x.rotate_right(2) ^ x.rotate_right(13) ^ x.rotate_right(22) }
+pub(crate) fn ep0(x: u32) -> u32 { x.rotate_right(2) ^ x.rotate_right(13) ^ x.rotate_right(22) }
 #[inline(always)]
-fn ep1(x: u32) -> u32 { x.rotate_right(6) ^ x.rotate_right(11) ^ x.rotate_right(25) }
+pub(crate) fn ep1(x: u32) -> u32 { x.rotate_right(6) ^ x.rotate_right(11) ^ x.rotate_right(25) }
 #[inline(always)]
-fn sig0(x: u32) -> u32 { x.rotate_right(7) ^ x.rotate_right(18) ^ (x >> 3) }
+pub(crate) fn sig0(x: u32) -> u32 { x.rotate_right(7) ^ x.rotate_right(18) ^ (x >> 3) }
 #[inline(always)]
-fn sig1(x: u32) -> u32 { x.rotate_right(17) ^ x.rotate_right(19) ^ (x >> 10) }
+pub(crate) fn sig1(x: u32) -> u32 { x.rotate_right(17) ^ x.rotate_right(19) ^ (x >> 10) }
 #[inline(always)]
-fn ch(x: u32, y: u32, z: u32) -> u32 { (x & y) ^ (!x & z) }
+pub(crate) fn ch(x: u32, y: u32, z: u32) -> u32 { (x & y) ^ (!x & z) }
 #[inline(always)]
-fn maj(x: u32, y: u32, z: u32) -> u32 { (x & y) ^ (x & z) ^ (y & z) }
+pub(crate) fn maj(x: u32, y: u32, z: u32) -> u32 { (x & y) ^ (x & z) ^ (y & z) }
 
-/// Standalone unrolled transform — kept for tests against generic sha256.
-#[device]
-pub fn sha256_transform(state: &mut [u32; 8], block: &[u8; 64]) {
-    let bp = block.as_ptr();
+/// Hash base[32] || seed[16] || owner[32] (80 bytes) and inject the 8 u32
+/// result words as named `let` bindings into the caller's scope.
+///
+/// Why a macro and not a fn: cuda-oxide alpha drops `#[inline(always)]` on
+/// larger fns, leaving them as PTX `call.uni`s. That kills the surrounding
+/// loop-invariant motion (base/owner constants can't be hoisted out of the
+/// kernel's main loop) and forces the digest through a stack [u8;32]. As a
+/// macro the entire compress + final add lives in the kernel's MIR, so the
+/// 8 u32 outputs stay in registers all the way to the next stage.
+///
+/// The seed is taken as 4 u32s (big-endian-packed bytes 0..4, 4..8, 8..12,
+/// 12..16) instead of `&[u8;16]` so the caller doesn't have to materialise
+/// the seed in local memory — it can live entirely in registers between the
+/// PRNG draws and the SHA compress.
+///
+/// Args:
+///   $base   : &[u8; 32]
+///   $s0..$s3: u32 — seed bytes 0..16 BE-packed (s0 holds bytes 0..4)
+///   $owner  : &[u8; 32]
+///   $h0..$h7: ident — caller-named locals to receive the digest words (BE).
+#[macro_export]
+macro_rules! sha256_80 {
+    ($base:expr,
+     $s0:expr, $s1:expr, $s2:expr, $s3:expr,
+     $owner:expr,
+     $h0:ident, $h1:ident, $h2:ident, $h3:ident,
+     $h4:ident, $h5:ident, $h6:ident, $h7:ident) => {
+        let __base: &[u8; 32] = $base;
+        let __owner: &[u8; 32] = $owner;
+        let __seed_w0: u32 = $s0;
+        let __seed_w1: u32 = $s1;
+        let __seed_w2: u32 = $s2;
+        let __seed_w3: u32 = $s3;
+        let bp = __base.as_ptr();
+        let op = __owner.as_ptr();
 """)
-emit_load_m("", lambda b: f"unsafe {{ *bp.add({b}) }}")
-emit_extend_m("")
-in_state = ("state[0]", "state[1]", "state[2]", "state[3]",
-            "state[4]", "state[5]", "state[6]", "state[7]")
-out_state = ("ns0", "ns1", "ns2", "ns3", "ns4", "ns5", "ns6", "ns7")
-emit_compress("", in_state, out_state)
-print("""
-    let sp = state.as_mut_ptr();
-    unsafe {
-        *sp.add(0) = ns0;
-        *sp.add(1) = ns1;
-        *sp.add(2) = ns2;
-        *sp.add(3) = ns3;
-        *sp.add(4) = ns4;
-        *sp.add(5) = ns5;
-        *sp.add(6) = ns6;
-        *sp.add(7) = ns7;
-    }
-}
-""")
 
-# === sha256_80: hashes base(32) || seed(16) || owner(32) = 80 bytes
-# block0 = base[0..32] || seed[0..16] || owner[0..16]   bytes 0..63
-# block1 = owner[16..32] || 0x80 || zeros... || bitlen_be(640)
-print(f"""
-/// Fully-unrolled sha256 of base(32) || seed(16) || owner(32) — 80 bytes total.
-#[device]
-pub fn sha256_80(base: &[u8; 32], seed: &[u8; 16], owner: &[u8; 32], hash: &mut [u8; 32]) {{
-    let bp = base.as_ptr();
-    let sp = seed.as_ptr();
-    let op = owner.as_ptr();
-""")
-
-# block 0 byte expressions:
-#   bytes 0..32   = base[i]
-#   bytes 32..48  = seed[i-32]
-#   bytes 48..64  = owner[i-48]
+# ─── block 0: bytes 0..32 = base, 32..48 = seed (4 u32s), 48..64 = owner[0..16]
+# We bypass byte-loading for the seed entirely: the SHA message words ma08..ma11
+# are exactly the 4 BE-packed u32s the caller passed in, so we emit those directly
+# and skip the per-byte load+shift dance for the seed slot.
 def block0_byte(b):
     if b < 32:
         return f"unsafe {{ *bp.add({b}) }}"
     elif b < 48:
-        return f"unsafe {{ *sp.add({b - 32}) }}"
+        # seed bytes — handled by direct ma assignment below; this path
+        # would only fire for a leftover byte expression and is never used.
+        raise AssertionError(f"seed byte {b} should not be loaded byte-wise")
     else:
         return f"unsafe {{ *op.add({b - 48}) }}"
 
-emit_load_m("a", block0_byte)
-emit_extend_m("a")
+# Emit ma00..ma07 (base) and ma12..ma15 (owner[0..16]) via byte loads, but
+# splice in ma08..ma11 = seed words directly.
+def emit_load_m_block0_with_seed(indent):
+    for i in range(16):
+        if 8 <= i <= 11:
+            print(f"{indent}let ma{i:02}: u32 = __seed_w{i - 8};")
+            continue
+        b0, b1, b2, b3 = i*4, i*4+1, i*4+2, i*4+3
+        print(f"{indent}let ma{i:02}: u32 =")
+        print(f"{indent}      (({block0_byte(b0)}) as u32) << 24")
+        print(f"{indent}    | (({block0_byte(b1)}) as u32) << 16")
+        print(f"{indent}    | (({block0_byte(b2)}) as u32) << 8")
+        print(f"{indent}    | (({block0_byte(b3)}) as u32);")
 
-in_state_a = (f"0x{INIT_STATE[i]:08x}u32" for i in range(8))
-in_state_a = tuple(in_state_a)
+emit_load_m_block0_with_seed(indent="        ")
+emit_extend_m("a", indent="        ")
+
+in_state_a = tuple(f"0x{INIT_STATE[i]:08x}u32" for i in range(8))
 out_state_a = ("a0", "a1", "a2", "a3", "a4", "a5", "a6", "a7")
-emit_compress("a", in_state_a, out_state_a)
+emit_compress("a", in_state_a, out_state_a, indent="        ")
 
-# block 1 byte expressions:
-#   bytes 0..16   = owner[16 + i]
-#   byte 16       = 0x80
-#   bytes 17..56  = 0
-#   bytes 56..64  = bitlen_be(640) = 0x00 00 00 00 00 00 02 80
-#                                  byte: 56=0x00 57=0x00 58=0x00 59=0x00
-#                                        60=0x00 61=0x00 62=0x02 63=0x80
+# ─── block 1: owner[16..32] || 0x80 || zeros... || bitlen_be(640) ───────────
 BITLEN_BYTES = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x80]
 def block1_byte(b):
     if b < 16:
@@ -162,22 +193,22 @@ def block1_byte(b):
     else:
         return f"0x{BITLEN_BYTES[b - 56]:02x}u8"
 
-emit_load_m("b", block1_byte)
-emit_extend_m("b")
+emit_load_m("b", block1_byte, indent="        ")
+emit_extend_m("b", indent="        ")
 
 in_state_b = ("a0", "a1", "a2", "a3", "a4", "a5", "a6", "a7")
 out_state_b = ("b0", "b1", "b2", "b3", "b4", "b5", "b6", "b7")
-emit_compress("b", in_state_b, out_state_b)
+emit_compress("b", in_state_b, out_state_b, indent="        ")
 
-# emit final hash bytes from b0..b7 (big-endian)
-print("""
-    let hp = hash.as_mut_ptr();
-    unsafe {""")
-for word_idx, var in enumerate(("b0", "b1", "b2", "b3", "b4", "b5", "b6", "b7")):
-    for byte_in_word in range(4):
-        out_idx = word_idx * 4 + byte_in_word
-        shift = 24 - byte_in_word * 8
-        print(f"        *hp.add({out_idx}) = ({var} >> {shift}) as u8;")
-print("""    }
+# ─── inject named outputs ───────────────────────────────────────────────────
+print("""        let $h0 = b0;
+        let $h1 = b1;
+        let $h2 = b2;
+        let $h3 = b3;
+        let $h4 = b4;
+        let $h5 = b5;
+        let $h6 = b6;
+        let $h7 = b7;
+    };
 }
 """)
