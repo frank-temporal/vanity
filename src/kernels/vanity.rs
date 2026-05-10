@@ -17,11 +17,16 @@ fn mask_has(mask: u64, dx: u8) -> bool {
 #[kernel]
 pub fn vanity_search(
     seed_ptr: *const u8,             // 32 — xorshift seed
+    // Host-precomputed state at round 8 of block 1 — function of base only,
+    // so we run rounds 0..7 once on the CPU per launch.
+    mid0: u32, mid1: u32, mid2: u32, mid3: u32,
+    mid4: u32, mid5: u32, mid6: u32, mid7: u32,
     // base and owner come in as 8 BE-packed u32s each — direct kernel
     // params instead of pointers, so they end up as ld.param values that
     // are trivially loop-invariant. With *const u8 they were being
     // re-loaded byte-by-byte inside the loop because LLVM couldn't prove
-    // no-alias against the per-iter atomic ops.
+    // no-alias against the per-iter atomic ops. base_w is still passed
+    // because the SHA message schedule W[16..22] references W[0..7].
     base_w0: u32, base_w1: u32, base_w2: u32, base_w3: u32,
     base_w4: u32, base_w5: u32, base_w6: u32, base_w7: u32,
     owner_w0: u32, owner_w1: u32, owner_w2: u32, owner_w3: u32,
@@ -110,7 +115,9 @@ pub fn vanity_search(
         let s3 = (sb12 as u32) << 24 | (sb13 as u32) << 16 | (sb14 as u32) << 8 | (sb15 as u32);
 
         // sha256(base || seed || owner) → 8 u32s in registers (no [u8;32] buffer)
+        // Starting from the host-computed midstate skips rounds 0..7 entirely.
         sha256_80!(
+            mid0, mid1, mid2, mid3, mid4, mid5, mid6, mid7,
             base_w0, base_w1, base_w2, base_w3, base_w4, base_w5, base_w6, base_w7,
             s0, s1, s2, s3,
             owner_w0, owner_w1, owner_w2, owner_w3, owner_w4, owner_w5, owner_w6, owner_w7,

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generates src/kernels/sha256.rs as a pair of macros:
+"""Generates src/kernels/sha256.rs:
 
   sha256_80!(base, seed, owner => h0, h1, h2, h3, h4, h5, h6, h7)
 
@@ -7,11 +7,6 @@
       result words as `let h0 = ...; ... let h7 = ...;` into the caller's scope.
       This keeps the digest in registers — no [u8;32] buffer ever exists, so we
       don't pay local-memory traffic between sha256 and the next stage.
-
-  sha256_transform!(state, block)
-      Compatibility wrapper around the same compress core, used by hostside
-      tests. Operates on byte-array I/O and is therefore slower; not used in
-      the hot path.
 
 Output to stdout — redirect to src/kernels/sha256.rs."""
 
@@ -58,8 +53,18 @@ def emit_extend_m(prefix, indent):
               f".wrapping_add(m{prefix}{i-16:02});")
 
 
-def emit_compress(prefix, in_state_vars, out_state_vars, indent):
-    a, b, c, d, e, f, g, h = in_state_vars
+def emit_compress(prefix, init_vars, addback_vars, out_state_vars, indent, start_round=0):
+    """Emit the 64-round compression body.
+
+    init_vars   : 8-tuple — values to init a..h at round `start_round`.
+                  When start_round > 0 this should be the host-precomputed
+                  state after rounds 0..start_round-1 (the "midstate").
+    addback_vars: 8-tuple — values added back to post-compress a..h. Per the
+                  SHA spec this is the original IV (or block's state-in),
+                  NOT init_vars — the midstate optimisation lifts init_vars
+                  but the canonical add-back still uses the IV.
+    """
+    a, b, c, d, e, f, g, h = init_vars
     print(f"{indent}let mut a = {a};")
     print(f"{indent}let mut b = {b};")
     print(f"{indent}let mut c = {c};")
@@ -68,7 +73,7 @@ def emit_compress(prefix, in_state_vars, out_state_vars, indent):
     print(f"{indent}let mut f = {f};")
     print(f"{indent}let mut g = {g};")
     print(f"{indent}let mut h = {h};")
-    for i in range(64):
+    for i in range(start_round, 64):
         print(f"{indent}// round {i}")
         print(f"{indent}{{")
         print(f"{indent}    let t1 = h.wrapping_add({EP1}(e)).wrapping_add({CH}(e, f, g))"
@@ -78,14 +83,15 @@ def emit_compress(prefix, in_state_vars, out_state_vars, indent):
               f"d = c; c = b; b = a; a = t1.wrapping_add(t2);")
         print(f"{indent}}}")
     oa, ob, oc, od, oe, of, og, oh = out_state_vars
-    print(f"{indent}let {oa} = {a}.wrapping_add(a);")
-    print(f"{indent}let {ob} = {b}.wrapping_add(b);")
-    print(f"{indent}let {oc} = {c}.wrapping_add(c);")
-    print(f"{indent}let {od} = {d}.wrapping_add(d);")
-    print(f"{indent}let {oe} = {e}.wrapping_add(e);")
-    print(f"{indent}let {of} = {f}.wrapping_add(f);")
-    print(f"{indent}let {og} = {g}.wrapping_add(g);")
-    print(f"{indent}let {oh} = {h}.wrapping_add(h);")
+    aa, ab, ac, ad, ae, af, ag, ah = addback_vars
+    print(f"{indent}let {oa} = {aa}.wrapping_add(a);")
+    print(f"{indent}let {ob} = {ab}.wrapping_add(b);")
+    print(f"{indent}let {oc} = {ac}.wrapping_add(c);")
+    print(f"{indent}let {od} = {ad}.wrapping_add(d);")
+    print(f"{indent}let {oe} = {ae}.wrapping_add(e);")
+    print(f"{indent}let {of} = {af}.wrapping_add(f);")
+    print(f"{indent}let {og} = {ag}.wrapping_add(g);")
+    print(f"{indent}let {oh} = {ah}.wrapping_add(h);")
 
 
 # ─── header ─────────────────────────────────────────────────────────────────
@@ -112,33 +118,38 @@ pub(crate) fn maj(x: u32, y: u32, z: u32) -> u32 { (x & y) ^ (x & z) ^ (y & z) }
 /// Hash base[32] || seed[16] || owner[32] (80 bytes) and inject the 8 u32
 /// result words as named `let` bindings into the caller's scope.
 ///
-/// Why a macro and not a fn: cuda-oxide alpha drops `#[inline(always)]` on
-/// larger fns, leaving them as PTX `call.uni`s. That kills the surrounding
-/// loop-invariant motion (base/owner constants can't be hoisted out of the
-/// kernel's main loop) and forces the digest through a stack [u8;32]. As a
-/// macro the entire compress + final add lives in the kernel's MIR, so the
-/// 8 u32 outputs stay in registers all the way to the next stage.
+/// **Midstate optimisation**: rounds 0..7 of block 1's compress depend only on
+/// the SHA initial state and W[0..7] = base — both loop-invariant. cuda-oxide's
+/// codegen wasn't const-folding the round-0..7 `llvm.fshr.i32(const,const,k)`
+/// calls out of the inner loop, so we precompute the post-round-7 state
+/// (`$st0..$st7`) on the host and pass it in. The kernel starts compress at
+/// round 8.
 ///
-/// Inputs are taken as pre-packed BE u32 words rather than `&[u8;N]` ptrs:
-/// LLVM (under cuda-oxide) wasn't licm-hoisting the per-byte `ld.global` of
-/// `base`/`owner` out of the main loop, so we lift the load to the kernel
-/// prologue ourselves and pass 8 + 4 + 8 = 20 u32s in. The caller pins them
-/// as let bindings; LLVM then sees them as plain registers.
+/// W[16..22] of the message schedule still references W[0..7] = base, so we
+/// also pass `$b0..$b7` so the macro can do sig0(base)+base adds. LLVM is
+/// happy with those because `$b*` are kernel `.param` values.
 ///
 /// Args:
-///   $b0..$b7: u32 — base bytes 0..32 as BE words (b0 holds bytes 0..4)
-///   $s0..$s3: u32 — seed bytes 0..16 BE-packed (s0 holds bytes 0..4)
-///   $o0..$o7: u32 — owner bytes 0..32 as BE words
-///   $h0..$h7: ident — caller-named locals to receive the digest words (BE).
+///   $st0..$st7: u32 — state after rounds 0..7 of block 1 (host-precomputed)
+///   $b0..$b7  : u32 — base bytes 0..32 as BE words (b0 holds bytes 0..4)
+///   $s0..$s3  : u32 — seed bytes 0..16 BE-packed
+///   $o0..$o7  : u32 — owner bytes 0..32 as BE words
+///   $h0..$h7  : ident — caller-named locals to receive the digest words.
 #[macro_export]
 macro_rules! sha256_80 {
-    ($b0:expr, $b1:expr, $b2:expr, $b3:expr,
+    ($st0:expr, $st1:expr, $st2:expr, $st3:expr,
+     $st4:expr, $st5:expr, $st6:expr, $st7:expr,
+     $b0:expr, $b1:expr, $b2:expr, $b3:expr,
      $b4:expr, $b5:expr, $b6:expr, $b7:expr,
      $s0:expr, $s1:expr, $s2:expr, $s3:expr,
      $o0:expr, $o1:expr, $o2:expr, $o3:expr,
      $o4:expr, $o5:expr, $o6:expr, $o7:expr,
      $h0:ident, $h1:ident, $h2:ident, $h3:ident,
      $h4:ident, $h5:ident, $h6:ident, $h7:ident) => {
+        let __mid_a: u32 = $st0; let __mid_b: u32 = $st1;
+        let __mid_c: u32 = $st2; let __mid_d: u32 = $st3;
+        let __mid_e: u32 = $st4; let __mid_f: u32 = $st5;
+        let __mid_g: u32 = $st6; let __mid_h: u32 = $st7;
         let __base_w0: u32 = $b0; let __base_w1: u32 = $b1;
         let __base_w2: u32 = $b2; let __base_w3: u32 = $b3;
         let __base_w4: u32 = $b4; let __base_w5: u32 = $b5;
@@ -168,9 +179,12 @@ def emit_load_m_block0_pure_u32(indent):
 emit_load_m_block0_pure_u32(indent="        ")
 emit_extend_m("a", indent="        ")
 
-in_state_a = tuple(f"0x{INIT_STATE[i]:08x}u32" for i in range(8))
+# Block 1: init a..h to the host-precomputed midstate (post round-7), then run
+# rounds 8..63. The canonical SHA add-back still uses the original IV.
+midstate_vars = tuple(f"__mid_{c}" for c in ("a","b","c","d","e","f","g","h"))
+iv_vars = tuple(f"0x{INIT_STATE[i]:08x}u32" for i in range(8))
 out_state_a = ("a0", "a1", "a2", "a3", "a4", "a5", "a6", "a7")
-emit_compress("a", in_state_a, out_state_a, indent="        ")
+emit_compress("a", midstate_vars, iv_vars, out_state_a, indent="        ", start_round=8)
 
 # ─── block 1: ma00 = owner[16..20], ma01 = owner[20..24], ma02 = owner[24..28],
 #             ma03 = owner[28..32], then padding + bitlen — all literal consts.
@@ -189,9 +203,10 @@ def emit_load_m_block1_pure_u32(indent):
 emit_load_m_block1_pure_u32(indent="        ")
 emit_extend_m("b", indent="        ")
 
+# Block 2: init from block 1's output, run all 64 rounds, add back into same.
 in_state_b = ("a0", "a1", "a2", "a3", "a4", "a5", "a6", "a7")
 out_state_b = ("b0", "b1", "b2", "b3", "b4", "b5", "b6", "b7")
-emit_compress("b", in_state_b, out_state_b, indent="        ")
+emit_compress("b", in_state_b, in_state_b, out_state_b, indent="        ")
 
 # ─── inject named outputs ───────────────────────────────────────────────────
 print("""        let $h0 = b0;

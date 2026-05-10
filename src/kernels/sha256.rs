@@ -21,33 +21,38 @@ pub(crate) fn maj(x: u32, y: u32, z: u32) -> u32 { (x & y) ^ (x & z) ^ (y & z) }
 /// Hash base[32] || seed[16] || owner[32] (80 bytes) and inject the 8 u32
 /// result words as named `let` bindings into the caller's scope.
 ///
-/// Why a macro and not a fn: cuda-oxide alpha drops `#[inline(always)]` on
-/// larger fns, leaving them as PTX `call.uni`s. That kills the surrounding
-/// loop-invariant motion (base/owner constants can't be hoisted out of the
-/// kernel's main loop) and forces the digest through a stack [u8;32]. As a
-/// macro the entire compress + final add lives in the kernel's MIR, so the
-/// 8 u32 outputs stay in registers all the way to the next stage.
+/// **Midstate optimisation**: rounds 0..7 of block 1's compress depend only on
+/// the SHA initial state and W[0..7] = base — both loop-invariant. cuda-oxide's
+/// codegen wasn't const-folding the round-0..7 `llvm.fshr.i32(const,const,k)`
+/// calls out of the inner loop, so we precompute the post-round-7 state
+/// (`$st0..$st7`) on the host and pass it in. The kernel starts compress at
+/// round 8.
 ///
-/// Inputs are taken as pre-packed BE u32 words rather than `&[u8;N]` ptrs:
-/// LLVM (under cuda-oxide) wasn't licm-hoisting the per-byte `ld.global` of
-/// `base`/`owner` out of the main loop, so we lift the load to the kernel
-/// prologue ourselves and pass 8 + 4 + 8 = 20 u32s in. The caller pins them
-/// as let bindings; LLVM then sees them as plain registers.
+/// W[16..22] of the message schedule still references W[0..7] = base, so we
+/// also pass `$b0..$b7` so the macro can do sig0(base)+base adds. LLVM is
+/// happy with those because `$b*` are kernel `.param` values.
 ///
 /// Args:
-///   $b0..$b7: u32 — base bytes 0..32 as BE words (b0 holds bytes 0..4)
-///   $s0..$s3: u32 — seed bytes 0..16 BE-packed (s0 holds bytes 0..4)
-///   $o0..$o7: u32 — owner bytes 0..32 as BE words
-///   $h0..$h7: ident — caller-named locals to receive the digest words (BE).
+///   $st0..$st7: u32 — state after rounds 0..7 of block 1 (host-precomputed)
+///   $b0..$b7  : u32 — base bytes 0..32 as BE words (b0 holds bytes 0..4)
+///   $s0..$s3  : u32 — seed bytes 0..16 BE-packed
+///   $o0..$o7  : u32 — owner bytes 0..32 as BE words
+///   $h0..$h7  : ident — caller-named locals to receive the digest words.
 #[macro_export]
 macro_rules! sha256_80 {
-    ($b0:expr, $b1:expr, $b2:expr, $b3:expr,
+    ($st0:expr, $st1:expr, $st2:expr, $st3:expr,
+     $st4:expr, $st5:expr, $st6:expr, $st7:expr,
+     $b0:expr, $b1:expr, $b2:expr, $b3:expr,
      $b4:expr, $b5:expr, $b6:expr, $b7:expr,
      $s0:expr, $s1:expr, $s2:expr, $s3:expr,
      $o0:expr, $o1:expr, $o2:expr, $o3:expr,
      $o4:expr, $o5:expr, $o6:expr, $o7:expr,
      $h0:ident, $h1:ident, $h2:ident, $h3:ident,
      $h4:ident, $h5:ident, $h6:ident, $h7:ident) => {
+        let __mid_a: u32 = $st0; let __mid_b: u32 = $st1;
+        let __mid_c: u32 = $st2; let __mid_d: u32 = $st3;
+        let __mid_e: u32 = $st4; let __mid_f: u32 = $st5;
+        let __mid_g: u32 = $st6; let __mid_h: u32 = $st7;
         let __base_w0: u32 = $b0; let __base_w1: u32 = $b1;
         let __base_w2: u32 = $b2; let __base_w3: u32 = $b3;
         let __base_w4: u32 = $b4; let __base_w5: u32 = $b5;
@@ -123,62 +128,14 @@ macro_rules! sha256_80 {
         let ma61: u32 = $crate::kernels::sha256::sig1(ma59).wrapping_add(ma54).wrapping_add($crate::kernels::sha256::sig0(ma46)).wrapping_add(ma45);
         let ma62: u32 = $crate::kernels::sha256::sig1(ma60).wrapping_add(ma55).wrapping_add($crate::kernels::sha256::sig0(ma47)).wrapping_add(ma46);
         let ma63: u32 = $crate::kernels::sha256::sig1(ma61).wrapping_add(ma56).wrapping_add($crate::kernels::sha256::sig0(ma48)).wrapping_add(ma47);
-        let mut a = 0x6a09e667u32;
-        let mut b = 0xbb67ae85u32;
-        let mut c = 0x3c6ef372u32;
-        let mut d = 0xa54ff53au32;
-        let mut e = 0x510e527fu32;
-        let mut f = 0x9b05688cu32;
-        let mut g = 0x1f83d9abu32;
-        let mut h = 0x5be0cd19u32;
-        // round 0
-        {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x428a2f98u32).wrapping_add(ma00);
-            let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
-            h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
-        }
-        // round 1
-        {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x71374491u32).wrapping_add(ma01);
-            let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
-            h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
-        }
-        // round 2
-        {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xb5c0fbcfu32).wrapping_add(ma02);
-            let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
-            h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
-        }
-        // round 3
-        {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xe9b5dba5u32).wrapping_add(ma03);
-            let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
-            h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
-        }
-        // round 4
-        {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x3956c25bu32).wrapping_add(ma04);
-            let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
-            h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
-        }
-        // round 5
-        {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x59f111f1u32).wrapping_add(ma05);
-            let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
-            h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
-        }
-        // round 6
-        {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x923f82a4u32).wrapping_add(ma06);
-            let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
-            h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
-        }
-        // round 7
-        {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xab1c5ed5u32).wrapping_add(ma07);
-            let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
-            h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
-        }
+        let mut a = __mid_a;
+        let mut b = __mid_b;
+        let mut c = __mid_c;
+        let mut d = __mid_d;
+        let mut e = __mid_e;
+        let mut f = __mid_f;
+        let mut g = __mid_g;
+        let mut h = __mid_h;
         // round 8
         {
             let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xd807aa98u32).wrapping_add(ma08);
