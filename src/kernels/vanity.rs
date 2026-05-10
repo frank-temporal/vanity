@@ -1,4 +1,4 @@
-use cuda_device::{kernel, thread, debug::clock64};
+use cuda_device::{kernel, thread, SharedArray, debug::clock64};
 use cuda_device::atomic::{DeviceAtomicI32, DeviceAtomicU64, AtomicOrdering};
 use crate::{init_xorshift, xorshift128p, sha256_80, base58_chunks};
 
@@ -50,16 +50,27 @@ pub fn vanity_search(
 
     let mut st = init_xorshift!(seed_ptr, idx);
 
-    // Masks are *not* hoisted into registers — they're loop-invariant
-    // global reads, which after the first iter live in L1 (~4-cycle hit).
-    // Pinning all 21 u64s in registers cost us ~40 regs of occupancy.
-    // Define small wrappers that read the mask lazily inside each check
-    // so the live-range is one iter only.
+    // Stage prefix/suffix masks into shared memory once per block. The masks
+    // are loop-invariant and small (≤ 21×8B), but reading them straight from
+    // .global every iter goes through L1 — ~4-cycle hit best case, and L1
+    // gets evicted by the SHA work. Shared memory broadcast is 1 cycle and
+    // doesn't compete with L1.
+    static mut SH_PM: SharedArray<u64, MAX_PREFIX> = SharedArray::UNINIT;
+    static mut SH_SM: SharedArray<u64, MAX_SUFFIX> = SharedArray::UNINIT;
+    let tid = thread::threadIdx_x() as usize;
+    if tid < MAX_PREFIX {
+        unsafe { SH_PM[tid] = *prefix_masks_ptr.add(tid); }
+    }
+    if tid < MAX_SUFFIX {
+        unsafe { SH_SM[tid] = *suffix_masks_ptr.add(tid); }
+    }
+    thread::sync_threads();
+
     macro_rules! pm {
-        ($i:expr) => { unsafe { *prefix_masks_ptr.add($i) } };
+        ($i:expr) => { unsafe { SH_PM[$i] } };
     }
     macro_rules! sm {
-        ($i:expr) => { unsafe { *suffix_masks_ptr.add($i) } };
+        ($i:expr) => { unsafe { SH_SM[$i] } };
     }
 
     let start_clock = clock64();
