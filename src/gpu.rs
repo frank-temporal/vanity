@@ -78,13 +78,25 @@ fn build_suffix_masks(suffix: &[u8], ci: bool) -> [u64; MAX_SUFFIX] {
     out
 }
 
+/// Pack 32 BE bytes into 8 u32 words (b0 holds bytes 0..4, MSB first).
+fn pack_be_words(bytes: &[u8; 32]) -> [u32; 8] {
+    let mut out = [0u32; 8];
+    for i in 0..8 {
+        out[i] = (bytes[4*i+0] as u32) << 24
+               | (bytes[4*i+1] as u32) << 16
+               | (bytes[4*i+2] as u32) << 8
+               | (bytes[4*i+3] as u32);
+    }
+    out
+}
+
 pub struct GpuGrindCtx {
     _ctx: Arc<CudaContext>,
     stream: Arc<CudaStream>,
     module: Arc<CudaModule>,
 
-    d_base: DeviceBuffer<u8>,
-    d_owner: DeviceBuffer<u8>,
+    base_w: [u32; 8],
+    owner_w: [u32; 8],
     d_prefix_masks: DeviceBuffer<u64>,
     d_suffix_masks: DeviceBuffer<u64>,
 
@@ -127,8 +139,8 @@ impl GpuGrindCtx {
         let prefix_masks = build_prefix_masks(target, case_insensitive);
         let suffix_masks = build_suffix_masks(suffix, case_insensitive);
 
-        let d_base   = DeviceBuffer::from_host(&stream, base).expect("d_base");
-        let d_owner  = DeviceBuffer::from_host(&stream, owner).expect("d_owner");
+        let base_w = pack_be_words(base);
+        let owner_w = pack_be_words(owner);
         let d_prefix_masks = DeviceBuffer::from_host(&stream, &prefix_masks).expect("d_prefix_masks");
         let d_suffix_masks = DeviceBuffer::from_host(&stream, &suffix_masks).expect("d_suffix_masks");
 
@@ -144,8 +156,8 @@ impl GpuGrindCtx {
             _ctx: ctx,
             stream,
             module,
-            d_base,
-            d_owner,
+            base_w,
+            owner_w,
             d_prefix_masks,
             d_suffix_masks,
             d_seed,
@@ -178,8 +190,10 @@ impl GpuGrindCtx {
             },
             args: [
                 self.d_seed.cu_deviceptr()         as *mut u8,
-                self.d_base.cu_deviceptr()         as *mut u8,
-                self.d_owner.cu_deviceptr()        as *mut u8,
+                self.base_w[0], self.base_w[1], self.base_w[2], self.base_w[3],
+                self.base_w[4], self.base_w[5], self.base_w[6], self.base_w[7],
+                self.owner_w[0], self.owner_w[1], self.owner_w[2], self.owner_w[3],
+                self.owner_w[4], self.owner_w[5], self.owner_w[6], self.owner_w[7],
                 self.d_prefix_masks.cu_deviceptr() as *mut u64,
                 self.prefix_len,
                 self.d_suffix_masks.cu_deviceptr() as *mut u64,

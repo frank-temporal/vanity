@@ -119,81 +119,74 @@ pub(crate) fn maj(x: u32, y: u32, z: u32) -> u32 { (x & y) ^ (x & z) ^ (y & z) }
 /// macro the entire compress + final add lives in the kernel's MIR, so the
 /// 8 u32 outputs stay in registers all the way to the next stage.
 ///
-/// The seed is taken as 4 u32s (big-endian-packed bytes 0..4, 4..8, 8..12,
-/// 12..16) instead of `&[u8;16]` so the caller doesn't have to materialise
-/// the seed in local memory — it can live entirely in registers between the
-/// PRNG draws and the SHA compress.
+/// Inputs are taken as pre-packed BE u32 words rather than `&[u8;N]` ptrs:
+/// LLVM (under cuda-oxide) wasn't licm-hoisting the per-byte `ld.global` of
+/// `base`/`owner` out of the main loop, so we lift the load to the kernel
+/// prologue ourselves and pass 8 + 4 + 8 = 20 u32s in. The caller pins them
+/// as let bindings; LLVM then sees them as plain registers.
 ///
 /// Args:
-///   $base   : &[u8; 32]
+///   $b0..$b7: u32 — base bytes 0..32 as BE words (b0 holds bytes 0..4)
 ///   $s0..$s3: u32 — seed bytes 0..16 BE-packed (s0 holds bytes 0..4)
-///   $owner  : &[u8; 32]
+///   $o0..$o7: u32 — owner bytes 0..32 as BE words
 ///   $h0..$h7: ident — caller-named locals to receive the digest words (BE).
 #[macro_export]
 macro_rules! sha256_80 {
-    ($base:expr,
+    ($b0:expr, $b1:expr, $b2:expr, $b3:expr,
+     $b4:expr, $b5:expr, $b6:expr, $b7:expr,
      $s0:expr, $s1:expr, $s2:expr, $s3:expr,
-     $owner:expr,
+     $o0:expr, $o1:expr, $o2:expr, $o3:expr,
+     $o4:expr, $o5:expr, $o6:expr, $o7:expr,
      $h0:ident, $h1:ident, $h2:ident, $h3:ident,
      $h4:ident, $h5:ident, $h6:ident, $h7:ident) => {
-        let __base: &[u8; 32] = $base;
-        let __owner: &[u8; 32] = $owner;
-        let __seed_w0: u32 = $s0;
-        let __seed_w1: u32 = $s1;
-        let __seed_w2: u32 = $s2;
-        let __seed_w3: u32 = $s3;
-        let bp = __base.as_ptr();
-        let op = __owner.as_ptr();
+        let __base_w0: u32 = $b0; let __base_w1: u32 = $b1;
+        let __base_w2: u32 = $b2; let __base_w3: u32 = $b3;
+        let __base_w4: u32 = $b4; let __base_w5: u32 = $b5;
+        let __base_w6: u32 = $b6; let __base_w7: u32 = $b7;
+        let __seed_w0: u32 = $s0; let __seed_w1: u32 = $s1;
+        let __seed_w2: u32 = $s2; let __seed_w3: u32 = $s3;
+        let __owner_w0: u32 = $o0; let __owner_w1: u32 = $o1;
+        let __owner_w2: u32 = $o2; let __owner_w3: u32 = $o3;
+        let __owner_w4: u32 = $o4; let __owner_w5: u32 = $o5;
+        let __owner_w6: u32 = $o6; let __owner_w7: u32 = $o7;
 """)
 
-# ─── block 0: bytes 0..32 = base, 32..48 = seed (4 u32s), 48..64 = owner[0..16]
-# We bypass byte-loading for the seed entirely: the SHA message words ma08..ma11
-# are exactly the 4 BE-packed u32s the caller passed in, so we emit those directly
-# and skip the per-byte load+shift dance for the seed slot.
-def block0_byte(b):
-    if b < 32:
-        return f"unsafe {{ *bp.add({b}) }}"
-    elif b < 48:
-        # seed bytes — handled by direct ma assignment below; this path
-        # would only fire for a leftover byte expression and is never used.
-        raise AssertionError(f"seed byte {b} should not be loaded byte-wise")
-    else:
-        return f"unsafe {{ *op.add({b - 48}) }}"
-
-# Emit ma00..ma07 (base) and ma12..ma15 (owner[0..16]) via byte loads, but
-# splice in ma08..ma11 = seed words directly.
-def emit_load_m_block0_with_seed(indent):
+# ─── block 0: ma00..ma07 = base words, ma08..ma11 = seed, ma12..ma15 = owner[0..16]
+# Everything sourced from pre-loaded u32 locals — zero byte loads inside the
+# macro body. The caller's prologue is what actually fetches base/owner from
+# global memory, and rustc/LLVM hoists that out of the loop.
+def emit_load_m_block0_pure_u32(indent):
     for i in range(16):
-        if 8 <= i <= 11:
-            print(f"{indent}let ma{i:02}: u32 = __seed_w{i - 8};")
-            continue
-        b0, b1, b2, b3 = i*4, i*4+1, i*4+2, i*4+3
-        print(f"{indent}let ma{i:02}: u32 =")
-        print(f"{indent}      (({block0_byte(b0)}) as u32) << 24")
-        print(f"{indent}    | (({block0_byte(b1)}) as u32) << 16")
-        print(f"{indent}    | (({block0_byte(b2)}) as u32) << 8")
-        print(f"{indent}    | (({block0_byte(b3)}) as u32);")
+        if i < 8:
+            src = f"__base_w{i}"
+        elif i < 12:
+            src = f"__seed_w{i - 8}"
+        else:
+            src = f"__owner_w{i - 12}"
+        print(f"{indent}let ma{i:02}: u32 = {src};")
 
-emit_load_m_block0_with_seed(indent="        ")
+emit_load_m_block0_pure_u32(indent="        ")
 emit_extend_m("a", indent="        ")
 
 in_state_a = tuple(f"0x{INIT_STATE[i]:08x}u32" for i in range(8))
 out_state_a = ("a0", "a1", "a2", "a3", "a4", "a5", "a6", "a7")
 emit_compress("a", in_state_a, out_state_a, indent="        ")
 
-# ─── block 1: owner[16..32] || 0x80 || zeros... || bitlen_be(640) ───────────
-BITLEN_BYTES = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x80]
-def block1_byte(b):
-    if b < 16:
-        return f"unsafe {{ *op.add({b + 16}) }}"
-    elif b == 16:
-        return "0x80u8"
-    elif b < 56:
-        return "0u8"
-    else:
-        return f"0x{BITLEN_BYTES[b - 56]:02x}u8"
+# ─── block 1: ma00 = owner[16..20], ma01 = owner[20..24], ma02 = owner[24..28],
+#             ma03 = owner[28..32], then padding + bitlen — all literal consts.
+def emit_load_m_block1_pure_u32(indent):
+    for i in range(16):
+        if i < 4:
+            src = f"__owner_w{i + 4}"
+        elif i == 4:
+            src = "0x80000000u32"  # 0x80, then 24 zero bits
+        elif i == 15:
+            src = "0x00000280u32"  # bit-length 640 = 0x280
+        else:
+            src = "0u32"
+        print(f"{indent}let mb{i:02}: u32 = {src};")
 
-emit_load_m("b", block1_byte, indent="        ")
+emit_load_m_block1_pure_u32(indent="        ")
 emit_extend_m("b", indent="        ")
 
 in_state_b = ("a0", "a1", "a2", "a3", "a4", "a5", "a6", "a7")

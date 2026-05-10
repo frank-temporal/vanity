@@ -17,8 +17,15 @@ fn mask_has(mask: u64, dx: u8) -> bool {
 #[kernel]
 pub fn vanity_search(
     seed_ptr: *const u8,             // 32 — xorshift seed
-    base_ptr: *const u8,             // 32
-    owner_ptr: *const u8,            // 32
+    // base and owner come in as 8 BE-packed u32s each — direct kernel
+    // params instead of pointers, so they end up as ld.param values that
+    // are trivially loop-invariant. With *const u8 they were being
+    // re-loaded byte-by-byte inside the loop because LLVM couldn't prove
+    // no-alias against the per-iter atomic ops.
+    base_w0: u32, base_w1: u32, base_w2: u32, base_w3: u32,
+    base_w4: u32, base_w5: u32, base_w6: u32, base_w7: u32,
+    owner_w0: u32, owner_w1: u32, owner_w2: u32, owner_w3: u32,
+    owner_w4: u32, owner_w5: u32, owner_w6: u32, owner_w7: u32,
     prefix_masks_ptr: *const u64,    // MAX_PREFIX × u64; mask[i] = valid numeric digits for prefix[i]
     prefix_len: u64,
     suffix_masks_ptr: *const u64,    // MAX_SUFFIX × u64; mask[i] = valid numeric digits for the (i+1)-th-from-last suffix char
@@ -37,9 +44,6 @@ pub fn vanity_search(
     let idx = thread::index_1d().get() as u64;
 
     let mut st = init_xorshift!(seed_ptr, idx);
-
-    let base_arr  = unsafe { &*(base_ptr  as *const [u8; 32]) };
-    let owner_arr = unsafe { &*(owner_ptr as *const [u8; 32]) };
 
     // Masks are *not* hoisted into registers — they're loop-invariant
     // global reads, which after the first iter live in L1 (~4-cycle hit).
@@ -106,8 +110,11 @@ pub fn vanity_search(
         let s3 = (sb12 as u32) << 24 | (sb13 as u32) << 16 | (sb14 as u32) << 8 | (sb15 as u32);
 
         // sha256(base || seed || owner) → 8 u32s in registers (no [u8;32] buffer)
-        sha256_80!(base_arr, s0, s1, s2, s3, owner_arr,
-                   h0, h1, h2, h3, h4, h5, h6, h7);
+        sha256_80!(
+            base_w0, base_w1, base_w2, base_w3, base_w4, base_w5, base_w6, base_w7,
+            s0, s1, s2, s3,
+            owner_w0, owner_w1, owner_w2, owner_w3, owner_w4, owner_w5, owner_w6, owner_w7,
+            h0, h1, h2, h3, h4, h5, h6, h7);
 
         // base58 → 9 carry-propagated chunks in registers (no [u8;45] buffer)
         base58_chunks!(h0, h1, h2, h3, h4, h5, h6, h7,
@@ -152,29 +159,29 @@ pub fn vanity_search(
         // 43-char case, address[i] == raw_p[2+i]. We OR the two chains so we
         // don't lose the 16% of 43-char hashes. Masks are lazily loaded from
         // global memory (L1-cached) — see comment at top of fn.
-        macro_rules! check_prefix_at {
-            // `$( ($mask_idx:expr, $digit:ident) ),+` — checked in order, gated on plen.
-            ( $( ($mask_idx:expr, $digit:ident) ),+ $(,)? ) => {{
-                let mut ok = true;
-                let mut i = 0usize;
+        // Load each prefix mask exactly once per iter and use it twice (once for
+        // the 44-char layout, once for 43-char). Without this, the compiler can't
+        // CSE the two pm!(i) calls and we get 24 global loads instead of 12.
+        // The masks live as short-lived locals (one mask_has check, then dead).
+        macro_rules! check_prefix_both {
+            ( $( ($mask_idx:expr, $d44:ident, $d43:ident, $i:expr) ),+ $(,)? ) => {{
+                let mut ok44 = true;
+                let mut ok43 = true;
                 $(
-                    if plen > i {
-                        if !mask_has(pm!($mask_idx), $digit) { ok = false; }
+                    if plen > $i {
+                        let m = pm!($mask_idx);
+                        if !mask_has(m, $d44) { ok44 = false; }
+                        if !mask_has(m, $d43) { ok43 = false; }
                     }
-                    let _ = i; i += 1;
                 )+
-                ok
+                (ok44, ok43)
             }};
         }
-        let p_match_44 = check_prefix_at!(
-            (0,  d01), (1,  d02), (2,  d03), (3,  d04),
-            (4,  d05), (5,  d06), (6,  d07), (7,  d08),
-            (8,  d09), (9,  d10), (10, d11), (11, d12),
-        );
-        let p_match_43 = check_prefix_at!(
-            (0,  d02), (1,  d03), (2,  d04), (3,  d05),
-            (4,  d06), (5,  d07), (6,  d08), (7,  d09),
-            (8,  d10), (9,  d11), (10, d12), (11, d13),
+        let (p_match_44, p_match_43) = check_prefix_both!(
+            (0,  d01, d02,  0), (1,  d02, d03,  1), (2,  d03, d04,  2),
+            (3,  d04, d05,  3), (4,  d05, d06,  4), (5,  d06, d07,  5),
+            (6,  d07, d08,  6), (7,  d08, d09,  7), (8,  d09, d10,  8),
+            (9,  d10, d11,  9), (10, d11, d12, 10), (11, d12, d13, 11),
         );
         let p_match = if is_44 { p_match_44 } else { p_match_43 };
 

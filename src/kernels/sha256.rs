@@ -28,96 +28,53 @@ pub(crate) fn maj(x: u32, y: u32, z: u32) -> u32 { (x & y) ^ (x & z) ^ (y & z) }
 /// macro the entire compress + final add lives in the kernel's MIR, so the
 /// 8 u32 outputs stay in registers all the way to the next stage.
 ///
-/// The seed is taken as 4 u32s (big-endian-packed bytes 0..4, 4..8, 8..12,
-/// 12..16) instead of `&[u8;16]` so the caller doesn't have to materialise
-/// the seed in local memory — it can live entirely in registers between the
-/// PRNG draws and the SHA compress.
+/// Inputs are taken as pre-packed BE u32 words rather than `&[u8;N]` ptrs:
+/// LLVM (under cuda-oxide) wasn't licm-hoisting the per-byte `ld.global` of
+/// `base`/`owner` out of the main loop, so we lift the load to the kernel
+/// prologue ourselves and pass 8 + 4 + 8 = 20 u32s in. The caller pins them
+/// as let bindings; LLVM then sees them as plain registers.
 ///
 /// Args:
-///   $base   : &[u8; 32]
+///   $b0..$b7: u32 — base bytes 0..32 as BE words (b0 holds bytes 0..4)
 ///   $s0..$s3: u32 — seed bytes 0..16 BE-packed (s0 holds bytes 0..4)
-///   $owner  : &[u8; 32]
+///   $o0..$o7: u32 — owner bytes 0..32 as BE words
 ///   $h0..$h7: ident — caller-named locals to receive the digest words (BE).
 #[macro_export]
 macro_rules! sha256_80 {
-    ($base:expr,
+    ($b0:expr, $b1:expr, $b2:expr, $b3:expr,
+     $b4:expr, $b5:expr, $b6:expr, $b7:expr,
      $s0:expr, $s1:expr, $s2:expr, $s3:expr,
-     $owner:expr,
+     $o0:expr, $o1:expr, $o2:expr, $o3:expr,
+     $o4:expr, $o5:expr, $o6:expr, $o7:expr,
      $h0:ident, $h1:ident, $h2:ident, $h3:ident,
      $h4:ident, $h5:ident, $h6:ident, $h7:ident) => {
-        let __base: &[u8; 32] = $base;
-        let __owner: &[u8; 32] = $owner;
-        let __seed_w0: u32 = $s0;
-        let __seed_w1: u32 = $s1;
-        let __seed_w2: u32 = $s2;
-        let __seed_w3: u32 = $s3;
-        let bp = __base.as_ptr();
-        let op = __owner.as_ptr();
+        let __base_w0: u32 = $b0; let __base_w1: u32 = $b1;
+        let __base_w2: u32 = $b2; let __base_w3: u32 = $b3;
+        let __base_w4: u32 = $b4; let __base_w5: u32 = $b5;
+        let __base_w6: u32 = $b6; let __base_w7: u32 = $b7;
+        let __seed_w0: u32 = $s0; let __seed_w1: u32 = $s1;
+        let __seed_w2: u32 = $s2; let __seed_w3: u32 = $s3;
+        let __owner_w0: u32 = $o0; let __owner_w1: u32 = $o1;
+        let __owner_w2: u32 = $o2; let __owner_w3: u32 = $o3;
+        let __owner_w4: u32 = $o4; let __owner_w5: u32 = $o5;
+        let __owner_w6: u32 = $o6; let __owner_w7: u32 = $o7;
 
-        let ma00: u32 =
-              ((unsafe { *bp.add(0) }) as u32) << 24
-            | ((unsafe { *bp.add(1) }) as u32) << 16
-            | ((unsafe { *bp.add(2) }) as u32) << 8
-            | ((unsafe { *bp.add(3) }) as u32);
-        let ma01: u32 =
-              ((unsafe { *bp.add(4) }) as u32) << 24
-            | ((unsafe { *bp.add(5) }) as u32) << 16
-            | ((unsafe { *bp.add(6) }) as u32) << 8
-            | ((unsafe { *bp.add(7) }) as u32);
-        let ma02: u32 =
-              ((unsafe { *bp.add(8) }) as u32) << 24
-            | ((unsafe { *bp.add(9) }) as u32) << 16
-            | ((unsafe { *bp.add(10) }) as u32) << 8
-            | ((unsafe { *bp.add(11) }) as u32);
-        let ma03: u32 =
-              ((unsafe { *bp.add(12) }) as u32) << 24
-            | ((unsafe { *bp.add(13) }) as u32) << 16
-            | ((unsafe { *bp.add(14) }) as u32) << 8
-            | ((unsafe { *bp.add(15) }) as u32);
-        let ma04: u32 =
-              ((unsafe { *bp.add(16) }) as u32) << 24
-            | ((unsafe { *bp.add(17) }) as u32) << 16
-            | ((unsafe { *bp.add(18) }) as u32) << 8
-            | ((unsafe { *bp.add(19) }) as u32);
-        let ma05: u32 =
-              ((unsafe { *bp.add(20) }) as u32) << 24
-            | ((unsafe { *bp.add(21) }) as u32) << 16
-            | ((unsafe { *bp.add(22) }) as u32) << 8
-            | ((unsafe { *bp.add(23) }) as u32);
-        let ma06: u32 =
-              ((unsafe { *bp.add(24) }) as u32) << 24
-            | ((unsafe { *bp.add(25) }) as u32) << 16
-            | ((unsafe { *bp.add(26) }) as u32) << 8
-            | ((unsafe { *bp.add(27) }) as u32);
-        let ma07: u32 =
-              ((unsafe { *bp.add(28) }) as u32) << 24
-            | ((unsafe { *bp.add(29) }) as u32) << 16
-            | ((unsafe { *bp.add(30) }) as u32) << 8
-            | ((unsafe { *bp.add(31) }) as u32);
+        let ma00: u32 = __base_w0;
+        let ma01: u32 = __base_w1;
+        let ma02: u32 = __base_w2;
+        let ma03: u32 = __base_w3;
+        let ma04: u32 = __base_w4;
+        let ma05: u32 = __base_w5;
+        let ma06: u32 = __base_w6;
+        let ma07: u32 = __base_w7;
         let ma08: u32 = __seed_w0;
         let ma09: u32 = __seed_w1;
         let ma10: u32 = __seed_w2;
         let ma11: u32 = __seed_w3;
-        let ma12: u32 =
-              ((unsafe { *op.add(0) }) as u32) << 24
-            | ((unsafe { *op.add(1) }) as u32) << 16
-            | ((unsafe { *op.add(2) }) as u32) << 8
-            | ((unsafe { *op.add(3) }) as u32);
-        let ma13: u32 =
-              ((unsafe { *op.add(4) }) as u32) << 24
-            | ((unsafe { *op.add(5) }) as u32) << 16
-            | ((unsafe { *op.add(6) }) as u32) << 8
-            | ((unsafe { *op.add(7) }) as u32);
-        let ma14: u32 =
-              ((unsafe { *op.add(8) }) as u32) << 24
-            | ((unsafe { *op.add(9) }) as u32) << 16
-            | ((unsafe { *op.add(10) }) as u32) << 8
-            | ((unsafe { *op.add(11) }) as u32);
-        let ma15: u32 =
-              ((unsafe { *op.add(12) }) as u32) << 24
-            | ((unsafe { *op.add(13) }) as u32) << 16
-            | ((unsafe { *op.add(14) }) as u32) << 8
-            | ((unsafe { *op.add(15) }) as u32);
+        let ma12: u32 = __owner_w0;
+        let ma13: u32 = __owner_w1;
+        let ma14: u32 = __owner_w2;
+        let ma15: u32 = __owner_w3;
         let ma16: u32 = $crate::kernels::sha256::sig1(ma14).wrapping_add(ma09).wrapping_add($crate::kernels::sha256::sig0(ma01)).wrapping_add(ma00);
         let ma17: u32 = $crate::kernels::sha256::sig1(ma15).wrapping_add(ma10).wrapping_add($crate::kernels::sha256::sig0(ma02)).wrapping_add(ma01);
         let ma18: u32 = $crate::kernels::sha256::sig1(ma16).wrapping_add(ma11).wrapping_add($crate::kernels::sha256::sig0(ma03)).wrapping_add(ma02);
@@ -566,86 +523,22 @@ macro_rules! sha256_80 {
         let a5 = 0x9b05688cu32.wrapping_add(f);
         let a6 = 0x1f83d9abu32.wrapping_add(g);
         let a7 = 0x5be0cd19u32.wrapping_add(h);
-        let mb00: u32 =
-              ((unsafe { *op.add(16) }) as u32) << 24
-            | ((unsafe { *op.add(17) }) as u32) << 16
-            | ((unsafe { *op.add(18) }) as u32) << 8
-            | ((unsafe { *op.add(19) }) as u32);
-        let mb01: u32 =
-              ((unsafe { *op.add(20) }) as u32) << 24
-            | ((unsafe { *op.add(21) }) as u32) << 16
-            | ((unsafe { *op.add(22) }) as u32) << 8
-            | ((unsafe { *op.add(23) }) as u32);
-        let mb02: u32 =
-              ((unsafe { *op.add(24) }) as u32) << 24
-            | ((unsafe { *op.add(25) }) as u32) << 16
-            | ((unsafe { *op.add(26) }) as u32) << 8
-            | ((unsafe { *op.add(27) }) as u32);
-        let mb03: u32 =
-              ((unsafe { *op.add(28) }) as u32) << 24
-            | ((unsafe { *op.add(29) }) as u32) << 16
-            | ((unsafe { *op.add(30) }) as u32) << 8
-            | ((unsafe { *op.add(31) }) as u32);
-        let mb04: u32 =
-              ((0x80u8) as u32) << 24
-            | ((0u8) as u32) << 16
-            | ((0u8) as u32) << 8
-            | ((0u8) as u32);
-        let mb05: u32 =
-              ((0u8) as u32) << 24
-            | ((0u8) as u32) << 16
-            | ((0u8) as u32) << 8
-            | ((0u8) as u32);
-        let mb06: u32 =
-              ((0u8) as u32) << 24
-            | ((0u8) as u32) << 16
-            | ((0u8) as u32) << 8
-            | ((0u8) as u32);
-        let mb07: u32 =
-              ((0u8) as u32) << 24
-            | ((0u8) as u32) << 16
-            | ((0u8) as u32) << 8
-            | ((0u8) as u32);
-        let mb08: u32 =
-              ((0u8) as u32) << 24
-            | ((0u8) as u32) << 16
-            | ((0u8) as u32) << 8
-            | ((0u8) as u32);
-        let mb09: u32 =
-              ((0u8) as u32) << 24
-            | ((0u8) as u32) << 16
-            | ((0u8) as u32) << 8
-            | ((0u8) as u32);
-        let mb10: u32 =
-              ((0u8) as u32) << 24
-            | ((0u8) as u32) << 16
-            | ((0u8) as u32) << 8
-            | ((0u8) as u32);
-        let mb11: u32 =
-              ((0u8) as u32) << 24
-            | ((0u8) as u32) << 16
-            | ((0u8) as u32) << 8
-            | ((0u8) as u32);
-        let mb12: u32 =
-              ((0u8) as u32) << 24
-            | ((0u8) as u32) << 16
-            | ((0u8) as u32) << 8
-            | ((0u8) as u32);
-        let mb13: u32 =
-              ((0u8) as u32) << 24
-            | ((0u8) as u32) << 16
-            | ((0u8) as u32) << 8
-            | ((0u8) as u32);
-        let mb14: u32 =
-              ((0x00u8) as u32) << 24
-            | ((0x00u8) as u32) << 16
-            | ((0x00u8) as u32) << 8
-            | ((0x00u8) as u32);
-        let mb15: u32 =
-              ((0x00u8) as u32) << 24
-            | ((0x00u8) as u32) << 16
-            | ((0x02u8) as u32) << 8
-            | ((0x80u8) as u32);
+        let mb00: u32 = __owner_w4;
+        let mb01: u32 = __owner_w5;
+        let mb02: u32 = __owner_w6;
+        let mb03: u32 = __owner_w7;
+        let mb04: u32 = 0x80000000u32;
+        let mb05: u32 = 0u32;
+        let mb06: u32 = 0u32;
+        let mb07: u32 = 0u32;
+        let mb08: u32 = 0u32;
+        let mb09: u32 = 0u32;
+        let mb10: u32 = 0u32;
+        let mb11: u32 = 0u32;
+        let mb12: u32 = 0u32;
+        let mb13: u32 = 0u32;
+        let mb14: u32 = 0u32;
+        let mb15: u32 = 0x00000280u32;
         let mb16: u32 = $crate::kernels::sha256::sig1(mb14).wrapping_add(mb09).wrapping_add($crate::kernels::sha256::sig0(mb01)).wrapping_add(mb00);
         let mb17: u32 = $crate::kernels::sha256::sig1(mb15).wrapping_add(mb10).wrapping_add($crate::kernels::sha256::sig0(mb02)).wrapping_add(mb01);
         let mb18: u32 = $crate::kernels::sha256::sig1(mb16).wrapping_add(mb11).wrapping_add($crate::kernels::sha256::sig0(mb03)).wrapping_add(mb02);
