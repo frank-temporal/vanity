@@ -107,14 +107,35 @@ const SHA_IV: [u32; 8] = [
     0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
 ];
 
+/// Compute K[i] + W[i] for all 64 rounds of block 2. Block 2's message schedule
+/// is fully loop-invariant per launch (W[0..3] = owner_w[4..7], W[4..15] are
+/// fixed padding constants), so the entire schedule + K-add reduces to a 256-byte
+/// table the kernel reads once into shared memory. Avoids ~250 ops per iter
+/// (the 48 W[16..63] sig0/sig1 evaluations + 64 K-adds).
+fn sha256_block2_kw(owner_w: &[u32; 8]) -> [u32; 64] {
+    use crate::kernels::sha256::{sig0, sig1};
+
+    // Block 2 layout: owner[16..32] || 0x80 || zeros... || bitlen_be(640)
+    let mut w = [0u32; 64];
+    w[0] = owner_w[4]; w[1] = owner_w[5]; w[2] = owner_w[6]; w[3] = owner_w[7];
+    w[4] = 0x80000000;
+    // w[5..14] = 0
+    w[15] = 0x00000280; // bit length (640)
+    for i in 16..64 {
+        w[i] = sig1(w[i-2]).wrapping_add(w[i-7]).wrapping_add(sig0(w[i-15])).wrapping_add(w[i-16]);
+    }
+    let mut kw = [0u32; 64];
+    for i in 0..64 {
+        kw[i] = SHA_K[i].wrapping_add(w[i]);
+    }
+    kw
+}
+
 /// Run rounds 0..7 of SHA-256's compression with W[0..7] = base words, starting
 /// from the IV. Returns the (a,b,c,d,e,f,g,h) state at the start of round 8.
 /// The kernel's `sha256_80!` macro receives this and skips rounds 0..7.
 fn sha256_midstate_after_round_7(base_w: &[u32; 8]) -> [u32; 8] {
-    #[inline(always)] fn ep0(x: u32) -> u32 { x.rotate_right(2) ^ x.rotate_right(13) ^ x.rotate_right(22) }
-    #[inline(always)] fn ep1(x: u32) -> u32 { x.rotate_right(6) ^ x.rotate_right(11) ^ x.rotate_right(25) }
-    #[inline(always)] fn ch(x: u32, y: u32, z: u32) -> u32 { (x & y) ^ (!x & z) }
-    #[inline(always)] fn maj(x: u32, y: u32, z: u32) -> u32 { (x & y) ^ (x & z) ^ (y & z) }
+    use crate::kernels::sha256::{ep0, ep1, ch, maj};
 
     let (mut a, mut b, mut c, mut d, mut e, mut f, mut g, mut h) =
         (SHA_IV[0], SHA_IV[1], SHA_IV[2], SHA_IV[3],
@@ -136,6 +157,7 @@ pub struct GpuGrindCtx {
     midstate: [u32; 8],
     base_w: [u32; 8],
     owner_w: [u32; 8],
+    d_kw2: DeviceBuffer<u32>,
     d_prefix_masks: DeviceBuffer<u64>,
     d_suffix_masks: DeviceBuffer<u64>,
 
@@ -181,6 +203,8 @@ impl GpuGrindCtx {
         let base_w = pack_be_words(base);
         let owner_w = pack_be_words(owner);
         let midstate = sha256_midstate_after_round_7(&base_w);
+        let kw2 = sha256_block2_kw(&owner_w);
+        let d_kw2 = DeviceBuffer::from_host(&stream, &kw2).expect("d_kw2");
         let d_prefix_masks = DeviceBuffer::from_host(&stream, &prefix_masks).expect("d_prefix_masks");
         let d_suffix_masks = DeviceBuffer::from_host(&stream, &suffix_masks).expect("d_suffix_masks");
 
@@ -199,6 +223,7 @@ impl GpuGrindCtx {
             midstate,
             base_w,
             owner_w,
+            d_kw2,
             d_prefix_masks,
             d_suffix_masks,
             d_seed,
@@ -237,6 +262,7 @@ impl GpuGrindCtx {
                 self.base_w[4], self.base_w[5], self.base_w[6], self.base_w[7],
                 self.owner_w[0], self.owner_w[1], self.owner_w[2], self.owner_w[3],
                 self.owner_w[4], self.owner_w[5], self.owner_w[6], self.owner_w[7],
+                self.d_kw2.cu_deviceptr()          as *mut u32,
                 self.d_prefix_masks.cu_deviceptr() as *mut u64,
                 self.prefix_len,
                 self.d_suffix_masks.cu_deviceptr() as *mut u64,

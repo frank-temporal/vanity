@@ -37,6 +37,8 @@ pub(crate) fn maj(x: u32, y: u32, z: u32) -> u32 { (x & y) ^ (x & z) ^ (y & z) }
 ///   $b0..$b7  : u32 — base bytes 0..32 as BE words (b0 holds bytes 0..4)
 ///   $s0..$s3  : u32 — seed bytes 0..16 BE-packed
 ///   $o0..$o7  : u32 — owner bytes 0..32 as BE words
+///   $kw2      : ident — name of a `SharedArray<u32, 64>` containing
+///                       host-precomputed `K[i] + W[i]` for block 2.
 ///   $h0..$h7  : ident — caller-named locals to receive the digest words.
 #[macro_export]
 macro_rules! sha256_80 {
@@ -47,6 +49,7 @@ macro_rules! sha256_80 {
      $s0:expr, $s1:expr, $s2:expr, $s3:expr,
      $o0:expr, $o1:expr, $o2:expr, $o3:expr,
      $o4:expr, $o5:expr, $o6:expr, $o7:expr,
+     $kw2:ident,
      $h0:ident, $h1:ident, $h2:ident, $h3:ident,
      $h4:ident, $h5:ident, $h6:ident, $h7:ident) => {
         let __mid_a: u32 = $st0; let __mid_b: u32 = $st1;
@@ -138,337 +141,337 @@ macro_rules! sha256_80 {
         let mut h = __mid_h;
         // round 8
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xd807aa98u32).wrapping_add(ma08);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xd807aa98u32.wrapping_add(ma08));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 9
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x12835b01u32).wrapping_add(ma09);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x12835b01u32.wrapping_add(ma09));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 10
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x243185beu32).wrapping_add(ma10);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x243185beu32.wrapping_add(ma10));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 11
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x550c7dc3u32).wrapping_add(ma11);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x550c7dc3u32.wrapping_add(ma11));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 12
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x72be5d74u32).wrapping_add(ma12);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x72be5d74u32.wrapping_add(ma12));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 13
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x80deb1feu32).wrapping_add(ma13);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x80deb1feu32.wrapping_add(ma13));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 14
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x9bdc06a7u32).wrapping_add(ma14);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x9bdc06a7u32.wrapping_add(ma14));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 15
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xc19bf174u32).wrapping_add(ma15);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xc19bf174u32.wrapping_add(ma15));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 16
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xe49b69c1u32).wrapping_add(ma16);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xe49b69c1u32.wrapping_add(ma16));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 17
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xefbe4786u32).wrapping_add(ma17);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xefbe4786u32.wrapping_add(ma17));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 18
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x0fc19dc6u32).wrapping_add(ma18);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x0fc19dc6u32.wrapping_add(ma18));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 19
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x240ca1ccu32).wrapping_add(ma19);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x240ca1ccu32.wrapping_add(ma19));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 20
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x2de92c6fu32).wrapping_add(ma20);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x2de92c6fu32.wrapping_add(ma20));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 21
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x4a7484aau32).wrapping_add(ma21);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x4a7484aau32.wrapping_add(ma21));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 22
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x5cb0a9dcu32).wrapping_add(ma22);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x5cb0a9dcu32.wrapping_add(ma22));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 23
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x76f988dau32).wrapping_add(ma23);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x76f988dau32.wrapping_add(ma23));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 24
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x983e5152u32).wrapping_add(ma24);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x983e5152u32.wrapping_add(ma24));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 25
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xa831c66du32).wrapping_add(ma25);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xa831c66du32.wrapping_add(ma25));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 26
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xb00327c8u32).wrapping_add(ma26);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xb00327c8u32.wrapping_add(ma26));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 27
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xbf597fc7u32).wrapping_add(ma27);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xbf597fc7u32.wrapping_add(ma27));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 28
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xc6e00bf3u32).wrapping_add(ma28);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xc6e00bf3u32.wrapping_add(ma28));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 29
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xd5a79147u32).wrapping_add(ma29);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xd5a79147u32.wrapping_add(ma29));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 30
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x06ca6351u32).wrapping_add(ma30);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x06ca6351u32.wrapping_add(ma30));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 31
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x14292967u32).wrapping_add(ma31);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x14292967u32.wrapping_add(ma31));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 32
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x27b70a85u32).wrapping_add(ma32);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x27b70a85u32.wrapping_add(ma32));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 33
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x2e1b2138u32).wrapping_add(ma33);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x2e1b2138u32.wrapping_add(ma33));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 34
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x4d2c6dfcu32).wrapping_add(ma34);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x4d2c6dfcu32.wrapping_add(ma34));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 35
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x53380d13u32).wrapping_add(ma35);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x53380d13u32.wrapping_add(ma35));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 36
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x650a7354u32).wrapping_add(ma36);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x650a7354u32.wrapping_add(ma36));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 37
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x766a0abbu32).wrapping_add(ma37);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x766a0abbu32.wrapping_add(ma37));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 38
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x81c2c92eu32).wrapping_add(ma38);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x81c2c92eu32.wrapping_add(ma38));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 39
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x92722c85u32).wrapping_add(ma39);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x92722c85u32.wrapping_add(ma39));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 40
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xa2bfe8a1u32).wrapping_add(ma40);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xa2bfe8a1u32.wrapping_add(ma40));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 41
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xa81a664bu32).wrapping_add(ma41);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xa81a664bu32.wrapping_add(ma41));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 42
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xc24b8b70u32).wrapping_add(ma42);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xc24b8b70u32.wrapping_add(ma42));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 43
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xc76c51a3u32).wrapping_add(ma43);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xc76c51a3u32.wrapping_add(ma43));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 44
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xd192e819u32).wrapping_add(ma44);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xd192e819u32.wrapping_add(ma44));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 45
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xd6990624u32).wrapping_add(ma45);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xd6990624u32.wrapping_add(ma45));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 46
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xf40e3585u32).wrapping_add(ma46);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xf40e3585u32.wrapping_add(ma46));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 47
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x106aa070u32).wrapping_add(ma47);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x106aa070u32.wrapping_add(ma47));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 48
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x19a4c116u32).wrapping_add(ma48);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x19a4c116u32.wrapping_add(ma48));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 49
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x1e376c08u32).wrapping_add(ma49);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x1e376c08u32.wrapping_add(ma49));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 50
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x2748774cu32).wrapping_add(ma50);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x2748774cu32.wrapping_add(ma50));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 51
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x34b0bcb5u32).wrapping_add(ma51);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x34b0bcb5u32.wrapping_add(ma51));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 52
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x391c0cb3u32).wrapping_add(ma52);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x391c0cb3u32.wrapping_add(ma52));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 53
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x4ed8aa4au32).wrapping_add(ma53);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x4ed8aa4au32.wrapping_add(ma53));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 54
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x5b9cca4fu32).wrapping_add(ma54);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x5b9cca4fu32.wrapping_add(ma54));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 55
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x682e6ff3u32).wrapping_add(ma55);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x682e6ff3u32.wrapping_add(ma55));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 56
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x748f82eeu32).wrapping_add(ma56);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x748f82eeu32.wrapping_add(ma56));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 57
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x78a5636fu32).wrapping_add(ma57);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x78a5636fu32.wrapping_add(ma57));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 58
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x84c87814u32).wrapping_add(ma58);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x84c87814u32.wrapping_add(ma58));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 59
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x8cc70208u32).wrapping_add(ma59);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x8cc70208u32.wrapping_add(ma59));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 60
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x90befffau32).wrapping_add(ma60);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x90befffau32.wrapping_add(ma60));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 61
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xa4506cebu32).wrapping_add(ma61);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xa4506cebu32.wrapping_add(ma61));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 62
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xbef9a3f7u32).wrapping_add(ma62);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xbef9a3f7u32.wrapping_add(ma62));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 63
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xc67178f2u32).wrapping_add(ma63);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xc67178f2u32.wrapping_add(ma63));
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
@@ -480,70 +483,6 @@ macro_rules! sha256_80 {
         let a5 = 0x9b05688cu32.wrapping_add(f);
         let a6 = 0x1f83d9abu32.wrapping_add(g);
         let a7 = 0x5be0cd19u32.wrapping_add(h);
-        let mb00: u32 = __owner_w4;
-        let mb01: u32 = __owner_w5;
-        let mb02: u32 = __owner_w6;
-        let mb03: u32 = __owner_w7;
-        let mb04: u32 = 0x80000000u32;
-        let mb05: u32 = 0u32;
-        let mb06: u32 = 0u32;
-        let mb07: u32 = 0u32;
-        let mb08: u32 = 0u32;
-        let mb09: u32 = 0u32;
-        let mb10: u32 = 0u32;
-        let mb11: u32 = 0u32;
-        let mb12: u32 = 0u32;
-        let mb13: u32 = 0u32;
-        let mb14: u32 = 0u32;
-        let mb15: u32 = 0x00000280u32;
-        let mb16: u32 = $crate::kernels::sha256::sig1(mb14).wrapping_add(mb09).wrapping_add($crate::kernels::sha256::sig0(mb01)).wrapping_add(mb00);
-        let mb17: u32 = $crate::kernels::sha256::sig1(mb15).wrapping_add(mb10).wrapping_add($crate::kernels::sha256::sig0(mb02)).wrapping_add(mb01);
-        let mb18: u32 = $crate::kernels::sha256::sig1(mb16).wrapping_add(mb11).wrapping_add($crate::kernels::sha256::sig0(mb03)).wrapping_add(mb02);
-        let mb19: u32 = $crate::kernels::sha256::sig1(mb17).wrapping_add(mb12).wrapping_add($crate::kernels::sha256::sig0(mb04)).wrapping_add(mb03);
-        let mb20: u32 = $crate::kernels::sha256::sig1(mb18).wrapping_add(mb13).wrapping_add($crate::kernels::sha256::sig0(mb05)).wrapping_add(mb04);
-        let mb21: u32 = $crate::kernels::sha256::sig1(mb19).wrapping_add(mb14).wrapping_add($crate::kernels::sha256::sig0(mb06)).wrapping_add(mb05);
-        let mb22: u32 = $crate::kernels::sha256::sig1(mb20).wrapping_add(mb15).wrapping_add($crate::kernels::sha256::sig0(mb07)).wrapping_add(mb06);
-        let mb23: u32 = $crate::kernels::sha256::sig1(mb21).wrapping_add(mb16).wrapping_add($crate::kernels::sha256::sig0(mb08)).wrapping_add(mb07);
-        let mb24: u32 = $crate::kernels::sha256::sig1(mb22).wrapping_add(mb17).wrapping_add($crate::kernels::sha256::sig0(mb09)).wrapping_add(mb08);
-        let mb25: u32 = $crate::kernels::sha256::sig1(mb23).wrapping_add(mb18).wrapping_add($crate::kernels::sha256::sig0(mb10)).wrapping_add(mb09);
-        let mb26: u32 = $crate::kernels::sha256::sig1(mb24).wrapping_add(mb19).wrapping_add($crate::kernels::sha256::sig0(mb11)).wrapping_add(mb10);
-        let mb27: u32 = $crate::kernels::sha256::sig1(mb25).wrapping_add(mb20).wrapping_add($crate::kernels::sha256::sig0(mb12)).wrapping_add(mb11);
-        let mb28: u32 = $crate::kernels::sha256::sig1(mb26).wrapping_add(mb21).wrapping_add($crate::kernels::sha256::sig0(mb13)).wrapping_add(mb12);
-        let mb29: u32 = $crate::kernels::sha256::sig1(mb27).wrapping_add(mb22).wrapping_add($crate::kernels::sha256::sig0(mb14)).wrapping_add(mb13);
-        let mb30: u32 = $crate::kernels::sha256::sig1(mb28).wrapping_add(mb23).wrapping_add($crate::kernels::sha256::sig0(mb15)).wrapping_add(mb14);
-        let mb31: u32 = $crate::kernels::sha256::sig1(mb29).wrapping_add(mb24).wrapping_add($crate::kernels::sha256::sig0(mb16)).wrapping_add(mb15);
-        let mb32: u32 = $crate::kernels::sha256::sig1(mb30).wrapping_add(mb25).wrapping_add($crate::kernels::sha256::sig0(mb17)).wrapping_add(mb16);
-        let mb33: u32 = $crate::kernels::sha256::sig1(mb31).wrapping_add(mb26).wrapping_add($crate::kernels::sha256::sig0(mb18)).wrapping_add(mb17);
-        let mb34: u32 = $crate::kernels::sha256::sig1(mb32).wrapping_add(mb27).wrapping_add($crate::kernels::sha256::sig0(mb19)).wrapping_add(mb18);
-        let mb35: u32 = $crate::kernels::sha256::sig1(mb33).wrapping_add(mb28).wrapping_add($crate::kernels::sha256::sig0(mb20)).wrapping_add(mb19);
-        let mb36: u32 = $crate::kernels::sha256::sig1(mb34).wrapping_add(mb29).wrapping_add($crate::kernels::sha256::sig0(mb21)).wrapping_add(mb20);
-        let mb37: u32 = $crate::kernels::sha256::sig1(mb35).wrapping_add(mb30).wrapping_add($crate::kernels::sha256::sig0(mb22)).wrapping_add(mb21);
-        let mb38: u32 = $crate::kernels::sha256::sig1(mb36).wrapping_add(mb31).wrapping_add($crate::kernels::sha256::sig0(mb23)).wrapping_add(mb22);
-        let mb39: u32 = $crate::kernels::sha256::sig1(mb37).wrapping_add(mb32).wrapping_add($crate::kernels::sha256::sig0(mb24)).wrapping_add(mb23);
-        let mb40: u32 = $crate::kernels::sha256::sig1(mb38).wrapping_add(mb33).wrapping_add($crate::kernels::sha256::sig0(mb25)).wrapping_add(mb24);
-        let mb41: u32 = $crate::kernels::sha256::sig1(mb39).wrapping_add(mb34).wrapping_add($crate::kernels::sha256::sig0(mb26)).wrapping_add(mb25);
-        let mb42: u32 = $crate::kernels::sha256::sig1(mb40).wrapping_add(mb35).wrapping_add($crate::kernels::sha256::sig0(mb27)).wrapping_add(mb26);
-        let mb43: u32 = $crate::kernels::sha256::sig1(mb41).wrapping_add(mb36).wrapping_add($crate::kernels::sha256::sig0(mb28)).wrapping_add(mb27);
-        let mb44: u32 = $crate::kernels::sha256::sig1(mb42).wrapping_add(mb37).wrapping_add($crate::kernels::sha256::sig0(mb29)).wrapping_add(mb28);
-        let mb45: u32 = $crate::kernels::sha256::sig1(mb43).wrapping_add(mb38).wrapping_add($crate::kernels::sha256::sig0(mb30)).wrapping_add(mb29);
-        let mb46: u32 = $crate::kernels::sha256::sig1(mb44).wrapping_add(mb39).wrapping_add($crate::kernels::sha256::sig0(mb31)).wrapping_add(mb30);
-        let mb47: u32 = $crate::kernels::sha256::sig1(mb45).wrapping_add(mb40).wrapping_add($crate::kernels::sha256::sig0(mb32)).wrapping_add(mb31);
-        let mb48: u32 = $crate::kernels::sha256::sig1(mb46).wrapping_add(mb41).wrapping_add($crate::kernels::sha256::sig0(mb33)).wrapping_add(mb32);
-        let mb49: u32 = $crate::kernels::sha256::sig1(mb47).wrapping_add(mb42).wrapping_add($crate::kernels::sha256::sig0(mb34)).wrapping_add(mb33);
-        let mb50: u32 = $crate::kernels::sha256::sig1(mb48).wrapping_add(mb43).wrapping_add($crate::kernels::sha256::sig0(mb35)).wrapping_add(mb34);
-        let mb51: u32 = $crate::kernels::sha256::sig1(mb49).wrapping_add(mb44).wrapping_add($crate::kernels::sha256::sig0(mb36)).wrapping_add(mb35);
-        let mb52: u32 = $crate::kernels::sha256::sig1(mb50).wrapping_add(mb45).wrapping_add($crate::kernels::sha256::sig0(mb37)).wrapping_add(mb36);
-        let mb53: u32 = $crate::kernels::sha256::sig1(mb51).wrapping_add(mb46).wrapping_add($crate::kernels::sha256::sig0(mb38)).wrapping_add(mb37);
-        let mb54: u32 = $crate::kernels::sha256::sig1(mb52).wrapping_add(mb47).wrapping_add($crate::kernels::sha256::sig0(mb39)).wrapping_add(mb38);
-        let mb55: u32 = $crate::kernels::sha256::sig1(mb53).wrapping_add(mb48).wrapping_add($crate::kernels::sha256::sig0(mb40)).wrapping_add(mb39);
-        let mb56: u32 = $crate::kernels::sha256::sig1(mb54).wrapping_add(mb49).wrapping_add($crate::kernels::sha256::sig0(mb41)).wrapping_add(mb40);
-        let mb57: u32 = $crate::kernels::sha256::sig1(mb55).wrapping_add(mb50).wrapping_add($crate::kernels::sha256::sig0(mb42)).wrapping_add(mb41);
-        let mb58: u32 = $crate::kernels::sha256::sig1(mb56).wrapping_add(mb51).wrapping_add($crate::kernels::sha256::sig0(mb43)).wrapping_add(mb42);
-        let mb59: u32 = $crate::kernels::sha256::sig1(mb57).wrapping_add(mb52).wrapping_add($crate::kernels::sha256::sig0(mb44)).wrapping_add(mb43);
-        let mb60: u32 = $crate::kernels::sha256::sig1(mb58).wrapping_add(mb53).wrapping_add($crate::kernels::sha256::sig0(mb45)).wrapping_add(mb44);
-        let mb61: u32 = $crate::kernels::sha256::sig1(mb59).wrapping_add(mb54).wrapping_add($crate::kernels::sha256::sig0(mb46)).wrapping_add(mb45);
-        let mb62: u32 = $crate::kernels::sha256::sig1(mb60).wrapping_add(mb55).wrapping_add($crate::kernels::sha256::sig0(mb47)).wrapping_add(mb46);
-        let mb63: u32 = $crate::kernels::sha256::sig1(mb61).wrapping_add(mb56).wrapping_add($crate::kernels::sha256::sig0(mb48)).wrapping_add(mb47);
         let mut a = a0;
         let mut b = a1;
         let mut c = a2;
@@ -554,385 +493,385 @@ macro_rules! sha256_80 {
         let mut h = a7;
         // round 0
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x428a2f98u32).wrapping_add(mb00);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[0] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 1
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x71374491u32).wrapping_add(mb01);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[1] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 2
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xb5c0fbcfu32).wrapping_add(mb02);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[2] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 3
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xe9b5dba5u32).wrapping_add(mb03);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[3] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 4
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x3956c25bu32).wrapping_add(mb04);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[4] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 5
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x59f111f1u32).wrapping_add(mb05);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[5] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 6
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x923f82a4u32).wrapping_add(mb06);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[6] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 7
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xab1c5ed5u32).wrapping_add(mb07);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[7] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 8
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xd807aa98u32).wrapping_add(mb08);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[8] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 9
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x12835b01u32).wrapping_add(mb09);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[9] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 10
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x243185beu32).wrapping_add(mb10);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[10] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 11
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x550c7dc3u32).wrapping_add(mb11);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[11] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 12
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x72be5d74u32).wrapping_add(mb12);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[12] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 13
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x80deb1feu32).wrapping_add(mb13);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[13] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 14
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x9bdc06a7u32).wrapping_add(mb14);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[14] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 15
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xc19bf174u32).wrapping_add(mb15);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[15] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 16
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xe49b69c1u32).wrapping_add(mb16);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[16] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 17
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xefbe4786u32).wrapping_add(mb17);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[17] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 18
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x0fc19dc6u32).wrapping_add(mb18);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[18] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 19
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x240ca1ccu32).wrapping_add(mb19);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[19] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 20
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x2de92c6fu32).wrapping_add(mb20);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[20] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 21
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x4a7484aau32).wrapping_add(mb21);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[21] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 22
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x5cb0a9dcu32).wrapping_add(mb22);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[22] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 23
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x76f988dau32).wrapping_add(mb23);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[23] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 24
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x983e5152u32).wrapping_add(mb24);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[24] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 25
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xa831c66du32).wrapping_add(mb25);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[25] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 26
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xb00327c8u32).wrapping_add(mb26);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[26] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 27
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xbf597fc7u32).wrapping_add(mb27);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[27] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 28
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xc6e00bf3u32).wrapping_add(mb28);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[28] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 29
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xd5a79147u32).wrapping_add(mb29);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[29] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 30
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x06ca6351u32).wrapping_add(mb30);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[30] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 31
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x14292967u32).wrapping_add(mb31);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[31] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 32
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x27b70a85u32).wrapping_add(mb32);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[32] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 33
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x2e1b2138u32).wrapping_add(mb33);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[33] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 34
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x4d2c6dfcu32).wrapping_add(mb34);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[34] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 35
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x53380d13u32).wrapping_add(mb35);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[35] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 36
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x650a7354u32).wrapping_add(mb36);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[36] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 37
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x766a0abbu32).wrapping_add(mb37);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[37] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 38
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x81c2c92eu32).wrapping_add(mb38);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[38] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 39
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x92722c85u32).wrapping_add(mb39);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[39] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 40
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xa2bfe8a1u32).wrapping_add(mb40);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[40] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 41
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xa81a664bu32).wrapping_add(mb41);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[41] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 42
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xc24b8b70u32).wrapping_add(mb42);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[42] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 43
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xc76c51a3u32).wrapping_add(mb43);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[43] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 44
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xd192e819u32).wrapping_add(mb44);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[44] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 45
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xd6990624u32).wrapping_add(mb45);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[45] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 46
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xf40e3585u32).wrapping_add(mb46);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[46] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 47
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x106aa070u32).wrapping_add(mb47);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[47] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 48
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x19a4c116u32).wrapping_add(mb48);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[48] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 49
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x1e376c08u32).wrapping_add(mb49);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[49] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 50
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x2748774cu32).wrapping_add(mb50);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[50] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 51
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x34b0bcb5u32).wrapping_add(mb51);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[51] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 52
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x391c0cb3u32).wrapping_add(mb52);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[52] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 53
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x4ed8aa4au32).wrapping_add(mb53);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[53] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 54
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x5b9cca4fu32).wrapping_add(mb54);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[54] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 55
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x682e6ff3u32).wrapping_add(mb55);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[55] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 56
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x748f82eeu32).wrapping_add(mb56);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[56] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 57
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x78a5636fu32).wrapping_add(mb57);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[57] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 58
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x84c87814u32).wrapping_add(mb58);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[58] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 59
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x8cc70208u32).wrapping_add(mb59);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[59] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 60
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0x90befffau32).wrapping_add(mb60);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[60] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 61
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xa4506cebu32).wrapping_add(mb61);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[61] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 62
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xbef9a3f7u32).wrapping_add(mb62);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[62] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }
         // round 63
         {
-            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(0xc67178f2u32).wrapping_add(mb63);
+            let t1 = h.wrapping_add($crate::kernels::sha256::ep1(e)).wrapping_add($crate::kernels::sha256::ch(e, f, g)).wrapping_add(unsafe { $kw2[63] });
             let t2 = $crate::kernels::sha256::ep0(a).wrapping_add($crate::kernels::sha256::maj(a, b, c));
             h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
         }

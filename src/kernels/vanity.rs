@@ -31,6 +31,11 @@ pub fn vanity_search(
     base_w4: u32, base_w5: u32, base_w6: u32, base_w7: u32,
     owner_w0: u32, owner_w1: u32, owner_w2: u32, owner_w3: u32,
     owner_w4: u32, owner_w5: u32, owner_w6: u32, owner_w7: u32,
+    // 64 u32s — host-precomputed K[i] + W[i] for block 2's compression.
+    // Block 2's entire message schedule is loop-invariant per launch, so we
+    // skip running it on-device. The kernel stages this into shared memory
+    // once, then the SHA macro reads kw2[i] per round.
+    kw2_ptr: *const u32,
     prefix_masks_ptr: *const u64,    // MAX_PREFIX × u64; mask[i] = valid numeric digits for prefix[i]
     prefix_len: u64,
     suffix_masks_ptr: *const u64,    // MAX_SUFFIX × u64; mask[i] = valid numeric digits for the (i+1)-th-from-last suffix char
@@ -57,12 +62,16 @@ pub fn vanity_search(
     // doesn't compete with L1.
     static mut SH_PM: SharedArray<u64, MAX_PREFIX> = SharedArray::UNINIT;
     static mut SH_SM: SharedArray<u64, MAX_SUFFIX> = SharedArray::UNINIT;
+    static mut SH_KW2: SharedArray<u32, 64> = SharedArray::UNINIT;
     let tid = thread::threadIdx_x() as usize;
     if tid < MAX_PREFIX {
         unsafe { SH_PM[tid] = *prefix_masks_ptr.add(tid); }
     }
     if tid < MAX_SUFFIX {
         unsafe { SH_SM[tid] = *suffix_masks_ptr.add(tid); }
+    }
+    if tid < 64 {
+        unsafe { SH_KW2[tid] = *kw2_ptr.add(tid); }
     }
     thread::sync_threads();
 
@@ -126,12 +135,14 @@ pub fn vanity_search(
         let s3 = (sb12 as u32) << 24 | (sb13 as u32) << 16 | (sb14 as u32) << 8 | (sb15 as u32);
 
         // sha256(base || seed || owner) → 8 u32s in registers (no [u8;32] buffer)
-        // Starting from the host-computed midstate skips rounds 0..7 entirely.
+        // - rounds 0..7 of block 1: skipped via host-precomputed midstate
+        // - block 2 message schedule: skipped via host-precomputed kw2 in shared mem
         sha256_80!(
             mid0, mid1, mid2, mid3, mid4, mid5, mid6, mid7,
             base_w0, base_w1, base_w2, base_w3, base_w4, base_w5, base_w6, base_w7,
             s0, s1, s2, s3,
             owner_w0, owner_w1, owner_w2, owner_w3, owner_w4, owner_w5, owner_w6, owner_w7,
+            SH_KW2,
             h0, h1, h2, h3, h4, h5, h6, h7);
 
         // base58 → 9 carry-propagated chunks in registers (no [u8;45] buffer)

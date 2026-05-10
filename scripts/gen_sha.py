@@ -53,7 +53,8 @@ def emit_extend_m(prefix, indent):
               f".wrapping_add(m{prefix}{i-16:02});")
 
 
-def emit_compress(prefix, init_vars, addback_vars, out_state_vars, indent, start_round=0):
+def emit_compress(prefix, init_vars, addback_vars, out_state_vars, indent,
+                  start_round=0, kw_expr=None):
     """Emit the 64-round compression body.
 
     init_vars   : 8-tuple — values to init a..h at round `start_round`.
@@ -63,6 +64,10 @@ def emit_compress(prefix, init_vars, addback_vars, out_state_vars, indent, start
                   SHA spec this is the original IV (or block's state-in),
                   NOT init_vars — the midstate optimisation lifts init_vars
                   but the canonical add-back still uses the IV.
+    kw_expr     : optional callable `i -> str`. When provided, replaces the
+                  per-round `K[i] + m{prefix}{i}` add with a single value —
+                  used by block 2 to read pre-computed `K + W[i]` from shared
+                  memory and skip the message schedule entirely.
     """
     a, b, c, d, e, f, g, h = init_vars
     print(f"{indent}let mut a = {a};")
@@ -74,10 +79,14 @@ def emit_compress(prefix, init_vars, addback_vars, out_state_vars, indent, start
     print(f"{indent}let mut g = {g};")
     print(f"{indent}let mut h = {h};")
     for i in range(start_round, 64):
+        if kw_expr is None:
+            kw_term = f"0x{K[i]:08x}u32.wrapping_add(m{prefix}{i:02})"
+        else:
+            kw_term = kw_expr(i)
         print(f"{indent}// round {i}")
         print(f"{indent}{{")
         print(f"{indent}    let t1 = h.wrapping_add({EP1}(e)).wrapping_add({CH}(e, f, g))"
-              f".wrapping_add(0x{K[i]:08x}u32).wrapping_add(m{prefix}{i:02});")
+              f".wrapping_add({kw_term});")
         print(f"{indent}    let t2 = {EP0}(a).wrapping_add({MAJ}(a, b, c));")
         print(f"{indent}    h = g; g = f; f = e; e = d.wrapping_add(t1); "
               f"d = c; c = b; b = a; a = t1.wrapping_add(t2);")
@@ -134,6 +143,8 @@ pub(crate) fn maj(x: u32, y: u32, z: u32) -> u32 { (x & y) ^ (x & z) ^ (y & z) }
 ///   $b0..$b7  : u32 — base bytes 0..32 as BE words (b0 holds bytes 0..4)
 ///   $s0..$s3  : u32 — seed bytes 0..16 BE-packed
 ///   $o0..$o7  : u32 — owner bytes 0..32 as BE words
+///   $kw2      : ident — name of a `SharedArray<u32, 64>` containing
+///                       host-precomputed `K[i] + W[i]` for block 2.
 ///   $h0..$h7  : ident — caller-named locals to receive the digest words.
 #[macro_export]
 macro_rules! sha256_80 {
@@ -144,6 +155,7 @@ macro_rules! sha256_80 {
      $s0:expr, $s1:expr, $s2:expr, $s3:expr,
      $o0:expr, $o1:expr, $o2:expr, $o3:expr,
      $o4:expr, $o5:expr, $o6:expr, $o7:expr,
+     $kw2:ident,
      $h0:ident, $h1:ident, $h2:ident, $h3:ident,
      $h4:ident, $h5:ident, $h6:ident, $h7:ident) => {
         let __mid_a: u32 = $st0; let __mid_b: u32 = $st1;
@@ -186,27 +198,17 @@ iv_vars = tuple(f"0x{INIT_STATE[i]:08x}u32" for i in range(8))
 out_state_a = ("a0", "a1", "a2", "a3", "a4", "a5", "a6", "a7")
 emit_compress("a", midstate_vars, iv_vars, out_state_a, indent="        ", start_round=8)
 
-# ─── block 1: ma00 = owner[16..20], ma01 = owner[20..24], ma02 = owner[24..28],
-#             ma03 = owner[28..32], then padding + bitlen — all literal consts.
-def emit_load_m_block1_pure_u32(indent):
-    for i in range(16):
-        if i < 4:
-            src = f"__owner_w{i + 4}"
-        elif i == 4:
-            src = "0x80000000u32"  # 0x80, then 24 zero bits
-        elif i == 15:
-            src = "0x00000280u32"  # bit-length 640 = 0x280
-        else:
-            src = "0u32"
-        print(f"{indent}let mb{i:02}: u32 = {src};")
-
-emit_load_m_block1_pure_u32(indent="        ")
-emit_extend_m("b", indent="        ")
-
-# Block 2: init from block 1's output, run all 64 rounds, add back into same.
+# Block 2: the entire message schedule (W[0..63]) is loop-invariant per launch
+# and the host pre-computes K[i] + W[i] into the SH_KW2 shared array.
+# We skip emit_load_m and emit_extend_m for block 2 — neither m_b00..m_b15 nor
+# m_b16..m_b63 are needed on-device. emit_compress is told to read kw[i] via
+# the macro arg `$kw2[i]` instead of computing K[i] + m_b{i}.
 in_state_b = ("a0", "a1", "a2", "a3", "a4", "a5", "a6", "a7")
 out_state_b = ("b0", "b1", "b2", "b3", "b4", "b5", "b6", "b7")
-emit_compress("b", in_state_b, in_state_b, out_state_b, indent="        ")
+emit_compress(
+    "b", in_state_b, in_state_b, out_state_b, indent="        ",
+    kw_expr=lambda i: f"unsafe {{ $kw2[{i}] }}",
+)
 
 # ─── inject named outputs ───────────────────────────────────────────────────
 print("""        let $h0 = b0;
