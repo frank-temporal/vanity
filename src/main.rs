@@ -553,6 +553,7 @@ fn grind(mut args: GrindArgs) {
         None
     };
 
+
     let grind_start = Instant::now();
     let reporter = spawn_hashrate_reporter(
         Arc::clone(&shutdown), expected, grind_start,

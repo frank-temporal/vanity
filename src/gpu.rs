@@ -1,25 +1,43 @@
-// src/gpu.rs
-
-use cuda_core::{CudaContext, CudaStream, DeviceBuffer, LaunchConfig, CudaModule};
+use cuda_core::{CudaContext, CudaModule, CudaStream, DeviceBuffer, IntoResult, LaunchConfig};
 use cuda_host::cuda_launch;
+use cuda_bindings::{
+    cuDeviceGetAttribute,
+    CUdevice_attribute_enum_CU_DEVICE_ATTRIBUTE_CLOCK_RATE,
+    CUdevice_attribute_enum_CU_DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK,
+    CUdevice_attribute_enum_CU_DEVICE_ATTRIBUTE_MAX_THREADS_PER_MULTIPROCESSOR,
+    CUdevice_attribute_enum_CU_DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT
+};
+
 use std::sync::Arc;
 
 use crate::kernels::vanity::__vanity_search_CudaKernel;
+
+fn dev_attr(device: cuda_bindings::CUdevice, attr: u32) -> i32 {
+    let mut val = std::mem::MaybeUninit::uninit();
+    unsafe {
+        cuDeviceGetAttribute(val.as_mut_ptr(), attr, device)
+            .result()
+            .expect("attr query");
+        val.assume_init()
+    }
+}
+
+fn gcd(a: u32, b: u32) -> u32 {
+    if b == 0 { a } else { gcd(b, a % b) }
+}
 
 pub struct GpuGrindCtx {
     _ctx: Arc<CudaContext>,
     stream: Arc<CudaStream>,
     module: Arc<CudaModule>,
 
-    // constants — uploaded once
     d_base: DeviceBuffer<u8>,
     d_owner: DeviceBuffer<u8>,
     d_target: DeviceBuffer<u8>,
     d_suffix: DeviceBuffer<u8>,
 
-    // per-launch
-    d_seed: DeviceBuffer<u8>,    // 32 bytes; rebuilt each launch
-    d_out: DeviceBuffer<u8>,     // 16 bytes
+    d_seed: DeviceBuffer<u8>,
+    d_out: DeviceBuffer<u8>,
     d_done: DeviceBuffer<i32>,
     d_count: DeviceBuffer<u64>,
 
@@ -28,7 +46,7 @@ pub struct GpuGrindCtx {
     target_len: u64,
     suffix_len: u64,
     case_insensitive: u32,
-    max_iters_per_launch: u64,
+    target_cycles: u64,
 }
 
 impl GpuGrindCtx {
@@ -44,8 +62,13 @@ impl GpuGrindCtx {
         let stream = ctx.default_stream();
         let module = cuda_host::load_kernel_module(&ctx, "vanity").expect("load_kernel_module");
 
+        let max_tpb = dev_attr(device_id as i32, CUdevice_attribute_enum_CU_DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK) as u32;
+        let max_tpm = dev_attr(device_id as i32, CUdevice_attribute_enum_CU_DEVICE_ATTRIBUTE_MAX_THREADS_PER_MULTIPROCESSOR) as u32;
+        let mpc_count = dev_attr(device_id as i32, CUdevice_attribute_enum_CU_DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT) as u32;
+        let block_size = max_tpm / gcd(max_tpm, max_tpb);
+
         let num_threads: u32 = 256;
-        let num_blocks: u32 = 128 * 8;
+        let num_blocks: u32 = block_size * mpc_count;
 
         let target_len = target.len() as u64;
         let suffix_len = suffix.len() as u64;
@@ -68,6 +91,9 @@ impl GpuGrindCtx {
         let d_done  = DeviceBuffer::<i32>::zeroed(&stream, 1).expect("d_done");
         let d_count = DeviceBuffer::<u64>::zeroed(&stream, 1).expect("d_count");
 
+        let clock_khz = dev_attr(device_id as i32, CUdevice_attribute_enum_CU_DEVICE_ATTRIBUTE_CLOCK_RATE) as u64;
+        let target_cycles = clock_khz as u64 * 1000 * 5;
+
         Self {
             _ctx: ctx,
             stream,
@@ -85,7 +111,7 @@ impl GpuGrindCtx {
             target_len,
             suffix_len,
             case_insensitive: if case_insensitive { 1 } else { 0 },
-            max_iters_per_launch: 1_000_000,
+            target_cycles,
         }
     }
 
@@ -115,7 +141,7 @@ impl GpuGrindCtx {
                 self.suffix_len,
                 self.d_out.cu_deviceptr()    as *mut u8,
                 self.case_insensitive,
-                self.max_iters_per_launch,
+                self.target_cycles,
                 self.d_done.cu_deviceptr()   as *mut i32,
                 self.d_count.cu_deviceptr()  as *mut u64,
             ]

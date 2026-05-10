@@ -1,4 +1,4 @@
-use cuda_device::{kernel, thread, device};
+use cuda_device::{kernel, thread, device, debug::clock64};
 use cuda_device::atomic::{DeviceAtomicI32, DeviceAtomicU64, AtomicOrdering};
 use super::sha256::sha256_80;
 use super::base58::base58_encode_32;
@@ -36,7 +36,7 @@ pub fn vanity_search(
     suffix_len: u64,
     out_ptr: *mut u8,           // 16
     case_insensitive: u32,
-    max_iters: u64,
+    target_cycles: u64,
     done_ptr: *mut i32,
     count_ptr: *mut u64,
 ) {
@@ -59,15 +59,20 @@ pub fn vanity_search(
     let mut local_encoded = [0u8; 44];
     let mut encoded_len: u32 = 0;
 
+    let start_clock = clock64();
     let mut iter: u64 = 0;
-    while iter < max_iters {
+    while iter < 1000*1000*1000*1000 {
         // poll for global stop every 100 iters
         if iter % 100 == 0 {
             if done.load(AtomicOrdering::Relaxed) != 0 {
                 count.fetch_add(iter, AtomicOrdering::Relaxed);
                 return;
             }
-            // no clock in cuda oxide?
+
+            if clock64() - start_clock > target_cycles {
+                count.fetch_add(iter, AtomicOrdering::Relaxed);
+                return;
+            }
         }
 
         // generate 16-byte seed via two 64-bit prng draws
