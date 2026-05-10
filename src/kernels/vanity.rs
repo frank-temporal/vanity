@@ -41,29 +41,17 @@ pub fn vanity_search(
     let base_arr  = unsafe { &*(base_ptr  as *const [u8; 32]) };
     let owner_arr = unsafe { &*(owner_ptr as *const [u8; 32]) };
 
-    // Hoist masks into registers — loop-invariant, read once.
-    let pm0  = unsafe { *prefix_masks_ptr.add(0) };
-    let pm1  = unsafe { *prefix_masks_ptr.add(1) };
-    let pm2  = unsafe { *prefix_masks_ptr.add(2) };
-    let pm3  = unsafe { *prefix_masks_ptr.add(3) };
-    let pm4  = unsafe { *prefix_masks_ptr.add(4) };
-    let pm5  = unsafe { *prefix_masks_ptr.add(5) };
-    let pm6  = unsafe { *prefix_masks_ptr.add(6) };
-    let pm7  = unsafe { *prefix_masks_ptr.add(7) };
-    let pm8  = unsafe { *prefix_masks_ptr.add(8) };
-    let pm9  = unsafe { *prefix_masks_ptr.add(9) };
-    let pm10 = unsafe { *prefix_masks_ptr.add(10) };
-    let pm11 = unsafe { *prefix_masks_ptr.add(11) };
-
-    let sm0 = unsafe { *suffix_masks_ptr.add(0) };
-    let sm1 = unsafe { *suffix_masks_ptr.add(1) };
-    let sm2 = unsafe { *suffix_masks_ptr.add(2) };
-    let sm3 = unsafe { *suffix_masks_ptr.add(3) };
-    let sm4 = unsafe { *suffix_masks_ptr.add(4) };
-    let sm5 = unsafe { *suffix_masks_ptr.add(5) };
-    let sm6 = unsafe { *suffix_masks_ptr.add(6) };
-    let sm7 = unsafe { *suffix_masks_ptr.add(7) };
-    let sm8 = unsafe { *suffix_masks_ptr.add(8) };
+    // Masks are *not* hoisted into registers — they're loop-invariant
+    // global reads, which after the first iter live in L1 (~4-cycle hit).
+    // Pinning all 21 u64s in registers cost us ~40 regs of occupancy.
+    // Define small wrappers that read the mask lazily inside each check
+    // so the live-range is one iter only.
+    macro_rules! pm {
+        ($i:expr) => { unsafe { *prefix_masks_ptr.add($i) } };
+    }
+    macro_rules! sm {
+        ($i:expr) => { unsafe { *suffix_masks_ptr.add($i) } };
+    }
 
     let start_clock = clock64();
     let mut iter: u64 = 0;
@@ -162,15 +150,16 @@ pub fn vanity_search(
 
         // Prefix match: in the 44-char case, address[i] == raw_p[1+i]; in the
         // 43-char case, address[i] == raw_p[2+i]. We OR the two chains so we
-        // don't lose the 16% of 43-char hashes.
+        // don't lose the 16% of 43-char hashes. Masks are lazily loaded from
+        // global memory (L1-cached) — see comment at top of fn.
         macro_rules! check_prefix_at {
-            // `$( ($mask:ident, $digit:ident) ),+` — checked in order, gated on plen.
-            ( $( ($mask:ident, $digit:ident) ),+ $(,)? ) => {{
+            // `$( ($mask_idx:expr, $digit:ident) ),+` — checked in order, gated on plen.
+            ( $( ($mask_idx:expr, $digit:ident) ),+ $(,)? ) => {{
                 let mut ok = true;
                 let mut i = 0usize;
                 $(
                     if plen > i {
-                        if !mask_has($mask, $digit) { ok = false; }
+                        if !mask_has(pm!($mask_idx), $digit) { ok = false; }
                     }
                     let _ = i; i += 1;
                 )+
@@ -178,34 +167,34 @@ pub fn vanity_search(
             }};
         }
         let p_match_44 = check_prefix_at!(
-            (pm0,  d01), (pm1,  d02), (pm2,  d03), (pm3,  d04),
-            (pm4,  d05), (pm5,  d06), (pm6,  d07), (pm7,  d08),
-            (pm8,  d09), (pm9,  d10), (pm10, d11), (pm11, d12),
+            (0,  d01), (1,  d02), (2,  d03), (3,  d04),
+            (4,  d05), (5,  d06), (6,  d07), (7,  d08),
+            (8,  d09), (9,  d10), (10, d11), (11, d12),
         );
         let p_match_43 = check_prefix_at!(
-            (pm0,  d02), (pm1,  d03), (pm2,  d04), (pm3,  d05),
-            (pm4,  d06), (pm5,  d07), (pm6,  d08), (pm7,  d09),
-            (pm8,  d10), (pm9,  d11), (pm10, d12), (pm11, d13),
+            (0,  d02), (1,  d03), (2,  d04), (3,  d05),
+            (4,  d06), (5,  d07), (6,  d08), (7,  d09),
+            (8,  d10), (9,  d11), (10, d12), (11, d13),
         );
         let p_match = if is_44 { p_match_44 } else { p_match_43 };
 
         // Suffix is anchored at the end → same digit indices regardless of
-        // encoded length. sm[i] corresponds to the i-th-from-last digit.
+        // encoded length. sm[i] is the (i+1)-th-from-last digit.
         let s_match = {
             let mut ok = true;
             macro_rules! check_suffix {
-                ( $( ($mask:ident, $digit:ident, $i:expr) ),+ $(,)? ) => {{
+                ( $( ($mask_idx:expr, $digit:ident, $i:expr) ),+ $(,)? ) => {{
                     $(
                         if slen > $i {
-                            if !mask_has($mask, $digit) { ok = false; }
+                            if !mask_has(sm!($mask_idx), $digit) { ok = false; }
                         }
                     )+
                 }};
             }
             check_suffix!(
-                (sm0, d44, 0), (sm1, d43, 1), (sm2, d42, 2),
-                (sm3, d41, 3), (sm4, d40, 4), (sm5, d39, 5),
-                (sm6, d38, 6), (sm7, d37, 7), (sm8, d36, 8),
+                (0, d44, 0), (1, d43, 1), (2, d42, 2),
+                (3, d41, 3), (4, d40, 4), (5, d39, 5),
+                (6, d38, 6), (7, d37, 7), (8, d36, 8),
             );
             ok
         };
