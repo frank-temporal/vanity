@@ -39,3 +39,11 @@ cuda-bindings = { git = "https://github.com/NVlabs/cuda-oxide.git" }
 
 [build-dependencies]
 cc = { version = "1.0.98", optional = true }
+
+# Point cuda-oxide deps at the local backend tree so source patches (e.g.
+# cuda_device::ptx::lop3) take effect without round-tripping through git.
+[patch."https://github.com/NVlabs/cuda-oxide.git"]
+cuda-device = { path = "/root/.cargo/cuda-oxide/src/crates/cuda-device" }
+cuda-host = { path = "/root/.cargo/cuda-oxide/src/crates/cuda-host" }
+cuda-core = { path = "/root/.cargo/cuda-oxide/src/crates/cuda-core" }
+cuda-bindings = { path = "/root/.cargo/cuda-oxide/src/crates/cuda-bindings" }

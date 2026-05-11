@@ -134,16 +134,23 @@ fn sha256_block2_kw(owner_w: &[u32; 8]) -> [u32; 64] {
 /// Run rounds 0..7 of SHA-256's compression with W[0..7] = base words, starting
 /// from the IV. Returns the (a,b,c,d,e,f,g,h) state at the start of round 8.
 /// The kernel's `sha256_80!` macro receives this and skips rounds 0..7.
+///
+/// Note: deliberately uses local `cpu_ch` / `cpu_maj` rather than the device
+/// helpers in `kernels::sha256` — those route through `cuda_device::ptx::lop3`
+/// which has a host-side `unreachable!()` stub (intentional, so any stray host
+/// dispatch panics loud rather than silently using the slow path).
 fn sha256_midstate_after_round_7(base_w: &[u32; 8]) -> [u32; 8] {
-    use crate::kernels::sha256::{ep0, ep1, ch, maj};
+    use crate::kernels::sha256::{ep0, ep1};
+    #[inline(always)] fn cpu_ch(x: u32, y: u32, z: u32) -> u32 { (x & y) ^ (!x & z) }
+    #[inline(always)] fn cpu_maj(x: u32, y: u32, z: u32) -> u32 { (x & y) ^ (x & z) ^ (y & z) }
 
     let (mut a, mut b, mut c, mut d, mut e, mut f, mut g, mut h) =
         (SHA_IV[0], SHA_IV[1], SHA_IV[2], SHA_IV[3],
          SHA_IV[4], SHA_IV[5], SHA_IV[6], SHA_IV[7]);
     for i in 0..8 {
-        let t1 = h.wrapping_add(ep1(e)).wrapping_add(ch(e, f, g))
+        let t1 = h.wrapping_add(ep1(e)).wrapping_add(cpu_ch(e, f, g))
                   .wrapping_add(SHA_K[i]).wrapping_add(base_w[i]);
-        let t2 = ep0(a).wrapping_add(maj(a, b, c));
+        let t2 = ep0(a).wrapping_add(cpu_maj(a, b, c));
         h = g; g = f; f = e; e = d.wrapping_add(t1); d = c; c = b; b = a; a = t1.wrapping_add(t2);
     }
     [a, b, c, d, e, f, g, h]

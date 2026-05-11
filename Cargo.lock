@@ -805,7 +805,6 @@ dependencies = [
 [[package]]
 name = "cuda-bindings"
 version = "0.1.0"
-source = "git+https://github.com/NVlabs/cuda-oxide.git#6de050946cd1013335a33cf2c5144888a32efab3"
 dependencies = [
  "bindgen",
 ]
@@ -813,7 +812,6 @@ dependencies = [
 [[package]]
 name = "cuda-core"
 version = "0.1.0"
-source = "git+https://github.com/NVlabs/cuda-oxide.git#6de050946cd1013335a33cf2c5144888a32efab3"
 dependencies = [
  "anyhow",
  "cuda-bindings",
@@ -822,7 +820,6 @@ dependencies = [
 [[package]]
 name = "cuda-device"
 version = "0.1.0"
-source = "git+https://github.com/NVlabs/cuda-oxide.git#6de050946cd1013335a33cf2c5144888a32efab3"
 dependencies = [
  "cuda-macros",
 ]
@@ -830,7 +827,6 @@ dependencies = [
 [[package]]
 name = "cuda-host"
 version = "0.1.0"
-source = "git+https://github.com/NVlabs/cuda-oxide.git#6de050946cd1013335a33cf2c5144888a32efab3"
 dependencies = [
  "cuda-core",
  "cuda-macros",
@@ -843,7 +839,6 @@ dependencies = [
 [[package]]
 name = "cuda-macros"
 version = "0.1.0"
-source = "git+https://github.com/NVlabs/cuda-oxide.git#6de050946cd1013335a33cf2c5144888a32efab3"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1751,7 +1746,6 @@ dependencies = [
 [[package]]
 name = "libnvvm-sys"
 version = "0.1.0"
-source = "git+https://github.com/NVlabs/cuda-oxide.git#6de050946cd1013335a33cf2c5144888a32efab3"
 dependencies = [
  "libloading",
  "thiserror 2.0.18",
@@ -2050,7 +2044,6 @@ checksum = "830b246a0e5f20af87141b25c173cd1b609bd7779a4617d6ec582abaf90870f3"
 [[package]]
 name = "nvjitlink-sys"
 version = "0.1.0"
-source = "git+https://github.com/NVlabs/cuda-oxide.git#6de050946cd1013335a33cf2c5144888a32efab3"
 dependencies = [
  "libloading",
  "thiserror 2.0.18",
@@ -2416,7 +2409,6 @@ dependencies = [
 [[package]]
 name = "reserved-oxide-symbols"
 version = "0.1.0"
-source = "git+https://github.com/NVlabs/cuda-oxide.git#6de050946cd1013335a33cf2c5144888a32efab3"
 
 [[package]]
 name = "ring"
