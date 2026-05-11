@@ -152,11 +152,30 @@ pub fn vanity_search(
         // silence unused-variable warnings for the mid chunks we don't decompose
         let _ = (c5_3, c4_4, c3_5, c2_6);
 
-        // Decompose only the digits the prefix/suffix can touch.
-        // Top window (digits 0..14): c7_0 → 0..5, c7_1 → 5..10, c6_2 → 10..15.
-        // Digit 0 is always 0 for a 32-byte input; skip it.
+        // ── Early-reject gate ────────────────────────────────────────────────
+        // The SHA work is sunk by now, but the rest of base58 digit decomposition
+        // (~23 digits × 3 ops) and the full mask scan (~190 ops) ARE still ahead
+        // of us. ~98%+ of iters won't match the very first prefix character or
+        // the very last suffix character, so we decompose only those three
+        // digits first, gate, and skip the tail when either fails.
+        //
+        // d01 == 0 ⇒ 43-char encoded length; the actual first digit is d02.
+        // d44 is unambiguous (suffix is anchored at the end regardless of length).
         let d01 = ((c7_0 / 195112) % 58) as u8;
         let d02 = ((c7_0 / 3364) % 58) as u8;
+        let d44 = (c0_8 % 58) as u8;
+        let is_44 = d01 != 0;
+        let first_prefix_digit = if is_44 { d01 } else { d02 };
+        let early_prefix_ok = plen == 0 || mask_has(pm!(0), first_prefix_digit);
+        let early_suffix_ok = slen == 0 || mask_has(sm!(0), d44);
+        if !(early_prefix_ok && early_suffix_ok) {
+            iter += 1;
+            continue;
+        }
+
+        // Survived the gate — finish decomposing the digits the prefix/suffix
+        // can actually reach. Top window: c7_0 → digits 0..5 (d01/d02 already
+        // done), c7_1 → 5..10, c6_2 → 10..15.
         let d03 = ((c7_0 / 58) % 58) as u8;
         let d04 = (c7_0 % 58) as u8;
         let d05 = (c7_1 / 11316496) as u8;
@@ -179,11 +198,6 @@ pub fn vanity_search(
         let d41 = ((c0_8 / 195112) % 58) as u8;
         let d42 = ((c0_8 / 3364) % 58) as u8;
         let d43 = ((c0_8 / 58) % 58) as u8;
-        let d44 = (c0_8 % 58) as u8;
-
-        // 44-char encoded case detection: digit 1 != 0 (occurs ~84% of the time).
-        // 43-char case: digit 1 == 0 (digits shifted by 1 to the right).
-        let is_44 = d01 != 0;
 
         // Prefix match: in the 44-char case, address[i] == raw_p[1+i]; in the
         // 43-char case, address[i] == raw_p[2+i]. We OR the two chains so we
