@@ -1,4 +1,4 @@
-use cuda_device::{kernel, thread, SharedArray, debug::clock64};
+use cuda_device::{kernel, launch_bounds, thread, SharedArray, debug::clock64};
 use cuda_device::atomic::{DeviceAtomicI32, DeviceAtomicU64, AtomicOrdering};
 use crate::{init_xorshift, xorshift128p, sha256_80, base58_chunks};
 
@@ -15,6 +15,7 @@ fn mask_has(mask: u64, dx: u8) -> bool {
 }
 
 #[kernel]
+#[launch_bounds(256, 2)]
 pub fn vanity_search(
     seed_ptr: *const u8,             // 32 — xorshift seed
     // Host-precomputed state at round 8 of block 1 — function of base only,
